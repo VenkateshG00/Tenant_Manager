@@ -9,8 +9,8 @@
  *  - payments allocate FIFO to charges: oldest charge first (by charge_date,
  *    then created_at, then id); allocations are kept for the per-charge
  *    breakdown and audit trail
- *  - a "charge" is dated by its charge_date; statements bucket by the month
- *    of that date
+ *  - statements and balances bucket charges by their billing period; charge
+ *    dates are used only to order charges within the FIFO allocation
  *  - credit charges carry a negative amount and reduce the balance
  */
 
@@ -73,7 +73,7 @@ export interface TenantStatement {
   paymentsReceivedPaise: Paise
   /** All payments received up to the end of the period (any charge they cleared). */
   paymentsToDatePaise: Paise
-  /** Portion of those payments allocated to charges dated on or before the period. */
+  /** Portion of those payments allocated to charges billed on or before the period. */
   allocatedPaise: Paise
   outstandingPaise: Paise
   status: StatementStatus
@@ -137,7 +137,8 @@ export interface BalanceOptions {
 }
 
 /**
- * Net balance as of a month: Σ(charges) − Σ(payments received by then).
+ * Net balance as of a month: charges for billed periods through that month
+ * minus payments received through that month.
  *
  * Using payments rather than allocations means an overpayment is correctly
  * shown as a credit instead of silently disappearing. Allocations are still
@@ -151,7 +152,7 @@ export function computeOutstanding(
   const { beforeMonth, throughMonth } = options
   let total = 0
   for (const charge of charges) {
-    const m = monthOf(charge.chargeDate)
+    const m = charge.period
     if (beforeMonth !== undefined && !(m < beforeMonth)) continue
     if (throughMonth !== undefined && !(m <= throughMonth)) continue
     total += charge.amountPaise
@@ -196,19 +197,19 @@ export function computeStatement(
     )
   }
 
-  const inPeriod = (date: string) => monthOf(date) === period
+  const isInPeriod = (date: string) => monthOf(date) === period
 
   const rentPaise = sumPaise(
-    tenantCharges.filter((c) => inPeriod(c.chargeDate) && c.chargeType === 'rent').map((c) => c.amountPaise),
+    tenantCharges.filter((c) => c.period === period && c.chargeType === 'rent').map((c) => c.amountPaise),
   )
   const electricityPaise = sumPaise(
-    tenantCharges.filter((c) => inPeriod(c.chargeDate) && c.chargeType === 'electricity').map((c) => c.amountPaise),
+    tenantCharges.filter((c) => c.period === period && c.chargeType === 'electricity').map((c) => c.amountPaise),
   )
   const otherPaise = sumPaise(
-    tenantCharges.filter((c) => inPeriod(c.chargeDate) && c.chargeType === 'other').map((c) => c.amountPaise),
+    tenantCharges.filter((c) => c.period === period && c.chargeType === 'other').map((c) => c.amountPaise),
   )
   const creditPaise = sumPaise(
-    tenantCharges.filter((c) => inPeriod(c.chargeDate) && c.chargeType === 'credit').map((c) => c.amountPaise),
+    tenantCharges.filter((c) => c.period === period && c.chargeType === 'credit').map((c) => c.amountPaise),
   )
 
   const totalChargesPaise = rentPaise + electricityPaise + otherPaise + creditPaise
@@ -220,7 +221,7 @@ export function computeStatement(
   })
 
   const paymentsReceivedPaise = sumPaise(
-    tenantPayments.filter((p) => inPeriod(p.paymentDate)).map((p) => p.amountPaise),
+    tenantPayments.filter((p) => isInPeriod(p.paymentDate)).map((p) => p.amountPaise),
   )
   const paymentsToDatePaise = sumPaise(
     tenantPayments.filter((p) => monthOf(p.paymentDate) <= period).map((p) => p.amountPaise),
@@ -229,7 +230,7 @@ export function computeStatement(
     allocations
       .filter((a) => {
         const charge = tenantCharges.find((c) => c.id === a.chargeId)
-        if (!charge || monthOf(charge.chargeDate) > period) return false
+        if (!charge || charge.period > period) return false
         const paymentDate = paymentDates.get(a.paymentId)
         return paymentDate !== undefined && monthOf(paymentDate) <= period
       })
@@ -237,7 +238,7 @@ export function computeStatement(
   )
 
   const lines: StatementLine[] = sortCharges(
-    tenantCharges.filter((c) => monthOf(c.chargeDate) <= period),
+    tenantCharges.filter((c) => c.period <= period),
   ).map((charge) => {
     const paid = paidByCharge.get(charge.id) ?? 0
     return { charge, billedPaise: charge.amountPaise, paidPaise: paid, balancePaise: charge.amountPaise - paid }

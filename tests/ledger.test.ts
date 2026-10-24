@@ -140,6 +140,47 @@ describe('computeStatement', () => {
     expect(august.paymentsReceivedPaise).toBe(855000)
   })
 
+  it('uses the billing period when a bill is generated in the following month', () => {
+    const lateBillCharge = charge({
+      id: 'sep-electricity',
+      tenantId: 't1',
+      chargeType: 'electricity',
+      period: '2026-09',
+      chargeDate: '2026-10-03',
+      amountPaise: 12000,
+    })
+    const octoberPayment = payment({
+      id: 'oct-payment',
+      tenantId: 't1',
+      paymentDate: '2026-10-10',
+      amountPaise: 5000,
+    })
+    const charges = [lateBillCharge]
+    const payments = [octoberPayment]
+    const allocations = allocateFIFO(charges, payments)
+
+    const september = computeStatement('t1', '2026-09', charges, payments, allocations)
+    expect(september.electricityPaise).toBe(12000)
+    expect(september.outstandingPaise).toBe(12000)
+    expect(september.lines.map((line) => line.charge.id)).toEqual(['sep-electricity'])
+    const septemberOverview = computeMonthOverview(
+      '2026-09',
+      [{ id: 't1', isActive: true }],
+      charges,
+      payments,
+      allocations,
+    )
+    expect(septemberOverview.electricityChargedPaise).toBe(12000)
+    expect(septemberOverview.outstandingPaise).toBe(12000)
+
+    const october = computeStatement('t1', '2026-10', charges, payments, allocations)
+    expect(october.previousOutstandingPaise).toBe(12000)
+    expect(october.electricityPaise).toBe(0)
+    expect(october.outstandingPaise).toBe(7000)
+    expect(october.allocatedPaise).toBe(5000)
+    expect(october.lines[0]).toMatchObject({ paidPaise: 5000, balancePaise: 7000 })
+  })
+
   it('applies a new month payment to old dues before the new rent', () => {
     // A September statement where the August balance is cleared in September.
     const september = charges.concat(
