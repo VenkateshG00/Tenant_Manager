@@ -372,14 +372,9 @@ export class SupabaseStore implements AppStore {
   }
 
   async deletePayment(id: string): Promise<void> {
-    const { data: allocs } = await this.client
-      .from('payment_allocations').select('*').eq('payment_id', id)
-    if ((allocs ?? []).length > 0) {
-      const { error: delAlloc } = await this.client
-        .from('payment_allocations').delete().eq('payment_id', id)
-      if (delAlloc) return fail(delAlloc.message)
-    }
-    const { error } = await this.client.from('payments').delete().eq('id', id)
+    const { error } = await this.client.rpc('delete_payment_with_allocations', {
+      p_payment_id: id,
+    })
     if (error) return fail(error.message)
   }
 
