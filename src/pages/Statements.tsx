@@ -79,7 +79,7 @@ export function StatementsPage() {
               onClick={() => {
                 const tenantById = new Map(workspace.tenants.map((tenant) => [tenant.id, tenant]))
                 downloadCsv(`statements-${month}.csv`, [
-                  ['Month', 'Tenant', 'Room', 'Previous dues (INR)', 'Rent (INR)', 'Electricity (INR)', 'Other (INR)', 'Credits (INR)', 'Payments received (INR)', 'Outstanding (INR)', 'Status'],
+                  ['Month', 'Tenant', 'Room', 'Previous dues (INR)', 'Rent (INR)', 'Electricity (INR)', 'Other (INR)', 'Credits (INR)', 'Payments received (INR)', 'Advance / credit (INR)', 'Outstanding (INR)', 'Status'],
                   ...workspace.statements.map((statement) => {
                     const tenant = tenantById.get(statement.tenantId)
                     return [
@@ -92,6 +92,7 @@ export function StatementsPage() {
                       paiseToDecimalString(statement.otherPaise),
                       paiseToDecimalString(statement.creditPaise),
                       paiseToDecimalString(statement.paymentsReceivedPaise),
+                      paiseToDecimalString(statement.advancePaise),
                       paiseToDecimalString(statement.outstandingPaise),
                       statement.status,
                     ]
@@ -114,7 +115,7 @@ export function StatementsPage() {
           <thead>
             <tr>
               <th>Tenant</th><th>Room</th><th>Previous dues</th><th>Rent</th>
-              <th>Electricity</th><th>Other</th><th>Credits</th><th>Payments</th><th>Outstanding</th>
+              <th>Electricity</th><th>Other</th><th>Credits</th><th>Payments</th><th>Advance / credit</th><th>Outstanding</th>
             </tr>
           </thead>
           <tbody>
@@ -130,6 +131,7 @@ export function StatementsPage() {
                   <td>{formatINR(statement.otherPaise)}</td>
                   <td>{formatINR(statement.creditPaise)}</td>
                   <td>{formatINR(statement.paymentsReceivedPaise)}</td>
+                  <td>{formatINR(statement.advancePaise)}</td>
                   <td>{formatINR(statement.outstandingPaise)}</td>
                 </tr>
               )
@@ -266,12 +268,13 @@ export function StatementsPage() {
                 </div>
 
                 <div className="px-4 py-4 sm:px-5">
-                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
                     <MiniStat label="Previous dues" value={statement.previousOutstandingPaise} />
                     <MiniStat label="Rent" value={statement.rentPaise} />
                     <MiniStat label="Electricity" value={statement.electricityPaise} />
                     <MiniStat label="Other" value={statement.otherPaise} />
                     <MiniStat label="Payments" value={statement.paymentsReceivedPaise} tone="positive" />
+                    <MiniStat label="Advance paid" value={statement.advancePaise} tone="positive" />
                   </div>
 
                   <div className="mt-4">

@@ -85,6 +85,7 @@ describe('application shell', () => {
   })
 
   it('shows a printable/shareable receipt after recording a payment', async () => {
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(null)
     render(<App />)
     fireEvent.click(await screen.findByRole('link', { name: 'Payments' }))
     fireEvent.click(await screen.findByRole('button', { name: '+ Record payment' }))
@@ -93,8 +94,18 @@ describe('application shell', () => {
 
     expect(await screen.findByRole('dialog', { name: 'Payment receipt' })).toBeInTheDocument()
     expect(screen.getByText('Amount received:')).toBeInTheDocument()
+    expect(screen.getAllByText(/^RCT-\d{8}-[A-Z0-9]{8}$/)).toHaveLength(2)
     expect(screen.getByText('Print / Save PDF')).toBeInTheDocument()
-    expect(screen.getByText('Share receipt')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Send receipt via WhatsApp' }))
+    expect(openSpy).toHaveBeenCalledWith(
+      expect.stringContaining('https://wa.me/'),
+      '_blank',
+      'noopener,noreferrer',
+    )
+    const sharedText = decodeURIComponent(
+      String(openSpy.mock.calls[0]?.[0]).split('text=')[1] ?? '',
+    )
+    expect(sharedText).toMatch(/Receipt: RCT-\d{8}-[A-Z0-9]{8}/)
   })
 
   it('opens the official bill page for the selected meter and preselects it in the bill form', async () => {

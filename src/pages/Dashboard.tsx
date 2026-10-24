@@ -59,7 +59,7 @@ export function DashboardPage() {
         actions={<MonthSelect />}
       />
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <StatCard
           label="Rent expected"
           value={formatINR(overview.expectedRentPaise)}
@@ -81,6 +81,12 @@ export function DashboardPage() {
           value={formatINR(overview.outstandingPaise)}
           tone={overview.outstandingPaise > 0 ? 'danger' : 'positive'}
           hint={`Includes ${formatINR(overview.previousDuesPaise)} carried forward`}
+        />
+        <StatCard
+          label="Tenant advances"
+          value={formatINR(overview.advancePaise)}
+          tone="positive"
+          hint="Payments not yet applied to billed charges"
         />
       </div>
 

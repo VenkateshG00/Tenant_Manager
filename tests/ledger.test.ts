@@ -218,6 +218,55 @@ describe('computeStatement', () => {
     expect(statement.status).toBe('credit')
   })
 
+  it('reports only unallocated payments as advance paid', () => {
+    const rent = charge({
+      id: 'advance-rent',
+      tenantId: 't1',
+      chargeType: 'rent',
+      period: '2026-08',
+      amountPaise: 10000,
+    })
+    const overpayment = payment({
+      id: 'advance-payment',
+      tenantId: 't1',
+      paymentDate: '2026-08-10',
+      amountPaise: 25000,
+    })
+    const statement = computeStatement(
+      't1',
+      '2026-08',
+      [rent],
+      [overpayment],
+      allocateFIFO([rent], [overpayment]),
+    )
+
+    expect(statement.advancePaise).toBe(15000)
+    expect(statement.outstandingPaise).toBe(-15000)
+  })
+
+  it('does not report dues or manual credits as advance paid', () => {
+    const rent = charge({
+      id: 'unpaid-rent',
+      tenantId: 't1',
+      chargeType: 'rent',
+      period: '2026-08',
+      amountPaise: 10000,
+    })
+    const discount = charge({
+      id: 'manual-credit',
+      tenantId: 't1',
+      chargeType: 'credit',
+      period: '2026-08',
+      amountPaise: -20000,
+    })
+    const unpaid = computeStatement('t1', '2026-08', [rent], [], [])
+    const credited = computeStatement('t1', '2026-08', [discount], [], [])
+
+    expect(unpaid.advancePaise).toBe(0)
+    expect(credited.outstandingPaise).toBeLessThan(0)
+    expect(credited.advancePaise).toBe(0)
+  })
+
   it('rejects invalid periods', () => {
     expect(() => computeStatement('t1', '2026-13', charges, payments, allocations)).toThrow()
   })
@@ -317,5 +366,6 @@ describe('computeMonthOverview', () => {
     expect(overview.unpaidCount).toBe(1)
     expect(overview.partialCount).toBe(1)
     expect(overview.paidCount).toBe(0)
+    expect(overview.advancePaise).toBe(0)
   })
 })

@@ -15,6 +15,8 @@ import { formatINR, paiseToDecimalString, sumPaise } from '../lib/money'
 import { formatDate, formatMonth, todayISO } from '../lib/dates'
 import { parseRupees } from '../lib/validation'
 import { downloadCsv } from '../lib/csv'
+import { formatReceiptNumber } from '../lib/receipt'
+import { buildShareLink, buildWaMeLink, openWhatsApp } from '../lib/whatsapp'
 import type { Charge, ChargeType, Payment, PaymentMethod } from '../data/types'
 
 const METHOD_LABEL: Record<PaymentMethod, string> = {
@@ -28,6 +30,7 @@ const METHOD_LABEL: Record<PaymentMethod, string> = {
 interface PaymentReceipt {
   payment: Payment
   tenantName: string
+  tenantPhone: string | null
   allocations: { charge: Charge; amountPaise: number }[]
 }
 
@@ -146,6 +149,7 @@ export function PaymentsPage() {
         setReceipt({
           payment,
           tenantName: tenantById.get(payment.tenantId)?.name ?? 'Tenant',
+          tenantPhone: tenantById.get(payment.tenantId)?.phone ?? null,
           allocations: allocations
             .filter((allocation) => allocation.paymentId === payment.id)
             .flatMap((allocation) => {
@@ -158,6 +162,7 @@ export function PaymentsPage() {
         setReceipt({
           payment,
           tenantName: tenantById.get(payment.tenantId)?.name ?? 'Tenant',
+          tenantPhone: tenantById.get(payment.tenantId)?.phone ?? null,
           allocations: [],
         })
         toast.error(
@@ -424,7 +429,9 @@ export function PaymentsPage() {
       <Modal
         open={receipt !== null}
         title="Payment receipt"
-        description="Payment recorded successfully. Share or print this receipt for your records."
+        description={receipt?.tenantPhone
+          ? 'Opens the tenant’s WhatsApp chat with this receipt ready. Review it and tap Send.'
+          : 'Opens WhatsApp with this receipt ready. Choose the tenant’s chat and tap Send.'}
         onClose={() => setReceipt(null)}
         footer={
           <>
@@ -441,7 +448,7 @@ export function PaymentsPage() {
                 if (!receipt) return
                 const text = [
                   'Payment receipt — Rent & Electricity Manager',
-                  `Receipt: ${receipt.payment.id}`,
+                  `Receipt: ${formatReceiptNumber(receipt.payment.id, receipt.payment.paymentDate)}`,
                   `Tenant: ${receipt.tenantName}`,
                   `Date: ${formatDate(receipt.payment.paymentDate)}`,
                   `Amount: ${formatINR(receipt.payment.amountPaise)}`,
@@ -453,30 +460,20 @@ export function PaymentsPage() {
                   ),
                   receipt.allocations.length === 0 ? 'Allocation: unallocated credit' : '',
                 ].filter(Boolean).join('\n')
-                if (navigator.share) {
-                  void navigator.share({ title: 'Payment receipt', text }).catch((error: unknown) => {
-                    if (error instanceof Error && error.name !== 'AbortError') {
-                      toast.error(`Could not share receipt: ${error.message}`)
-                    }
-                  })
-                } else if (navigator.clipboard?.writeText) {
-                  void navigator.clipboard.writeText(text).then(
-                    () => toast.success('Receipt details copied'),
-                    (error: unknown) => toast.error(`Could not copy receipt: ${error instanceof Error ? error.message : String(error)}`),
-                  )
-                } else {
-                  toast.error('Sharing and clipboard are unavailable. Use Print / Save PDF instead.')
-                }
+                const tenantChatLink = receipt.tenantPhone
+                  ? buildWaMeLink(receipt.tenantPhone, text)
+                  : null
+                openWhatsApp(tenantChatLink ?? buildShareLink(text))
               }}
             >
-              Share receipt
+              Send receipt via WhatsApp
             </Button>
           </>
         }
       >
         {receipt && (
           <div className="space-y-3 text-sm">
-            <p><span className="font-medium">Receipt ID:</span> {receipt.payment.id}</p>
+            <p><span className="font-medium">Receipt number:</span> {formatReceiptNumber(receipt.payment.id, receipt.payment.paymentDate)}</p>
             <p><span className="font-medium">Tenant:</span> {receipt.tenantName}</p>
             <p><span className="font-medium">Date:</span> {formatDate(receipt.payment.paymentDate)}</p>
             <p><span className="font-medium">Amount received:</span> {formatINR(receipt.payment.amountPaise)}</p>
@@ -505,7 +502,7 @@ export function PaymentsPage() {
             <p>Rent &amp; Electricity Manager</p>
             <table>
               <tbody>
-                <tr><th>Receipt ID</th><td>{receipt.payment.id}</td></tr>
+                <tr><th>Receipt number</th><td>{formatReceiptNumber(receipt.payment.id, receipt.payment.paymentDate)}</td></tr>
                 <tr><th>Tenant</th><td>{receipt.tenantName}</td></tr>
                 <tr><th>Payment date</th><td>{formatDate(receipt.payment.paymentDate)}</td></tr>
                 <tr><th>Amount received</th><td>{formatINR(receipt.payment.amountPaise)}</td></tr>

@@ -75,6 +75,8 @@ export interface TenantStatement {
   paymentsToDatePaise: Paise
   /** Portion of those payments allocated to charges billed on or before the period. */
   allocatedPaise: Paise
+  /** Payments received by this period but not applied to charges billed by it. */
+  advancePaise: Paise
   outstandingPaise: Paise
   status: StatementStatus
   lines: StatementLine[]
@@ -236,6 +238,7 @@ export function computeStatement(
       })
       .map((a) => a.amountPaise),
   )
+  const advancePaise = Math.max(0, paymentsToDatePaise - allocatedPaise)
 
   const lines: StatementLine[] = sortCharges(
     tenantCharges.filter((c) => c.period <= period),
@@ -262,6 +265,7 @@ export function computeStatement(
     paymentsReceivedPaise,
     paymentsToDatePaise,
     allocatedPaise,
+    advancePaise,
     outstandingPaise,
     status,
     lines,
@@ -309,6 +313,7 @@ export interface MonthOverview {
   creditPaise: Paise
   paymentsReceivedPaise: Paise
   previousDuesPaise: Paise
+  advancePaise: Paise
   outstandingPaise: Paise
   activeTenantCount: number
   paidCount: number
@@ -335,6 +340,7 @@ export function computeMonthOverview(
     creditPaise: sumPaise(statements.map((s) => s.creditPaise)),
     paymentsReceivedPaise: sumPaise(statements.map((s) => s.paymentsReceivedPaise)),
     previousDuesPaise: sumPaise(statements.map((s) => s.previousOutstandingPaise)),
+    advancePaise: sumPaise(statements.map((s) => s.advancePaise)),
     outstandingPaise: sumPaise(statements.map((s) => s.outstandingPaise)),
     activeTenantCount: activeIds.length,
     paidCount: statements.filter((s) => s.status === 'settled' || s.status === 'credit').length,
