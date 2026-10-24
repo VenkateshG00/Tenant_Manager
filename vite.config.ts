@@ -15,8 +15,8 @@ export default defineConfig({
         name: 'Rent & Electricity Manager',
         short_name: 'Rent Manager',
         description: 'Manage rent, electricity bills, tenant payments and statements.',
-        theme_color: '#f8fafc',
-        background_color: '#f8fafc',
+        theme_color: '#f6f7fb',
+        background_color: '#f6f7fb',
         display: 'standalone',
         orientation: 'any',
         icons: [

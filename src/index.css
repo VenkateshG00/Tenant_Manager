@@ -11,8 +11,15 @@
   }
 
   body {
-    @apply bg-slate-50 text-slate-900 antialiased;
+    @apply bg-[#f6f7fb] text-slate-900 antialiased;
     min-height: 100dvh;
+    background-image:
+      radial-gradient(ellipse at 8% 0%, rgb(224 231 255 / 0.32), transparent 30rem),
+      linear-gradient(180deg, rgb(255 255 255 / 0.56), transparent 22rem);
+  }
+
+  ::selection {
+    @apply bg-indigo-100 text-indigo-950;
   }
 
   @media (pointer: coarse) {

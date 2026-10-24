@@ -68,7 +68,7 @@ export function Modal({ open, title, description, onClose, children, footer, wid
 
   return (
     <div
-      className="fixed inset-0 z-40 flex items-end justify-center bg-slate-900/40 p-0 sm:items-center sm:p-4"
+      className="fixed inset-0 z-40 flex items-end justify-center bg-slate-950/50 p-0 backdrop-blur-[2px] sm:items-center sm:p-4"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose()
       }}
@@ -79,13 +79,13 @@ export function Modal({ open, title, description, onClose, children, footer, wid
         aria-modal="true"
         aria-labelledby={titleId}
         className={[
-          'flex max-h-[92vh] max-h-[92dvh] w-full flex-col rounded-t-2xl bg-white pb-[env(safe-area-inset-bottom)] shadow-xl sm:rounded-2xl sm:pb-0',
+          'flex max-h-[92vh] max-h-[92dvh] w-full flex-col rounded-t-3xl bg-white pb-[env(safe-area-inset-bottom)] shadow-2xl shadow-slate-950/20 sm:rounded-3xl sm:pb-0',
           wide ? 'sm:max-w-3xl' : 'sm:max-w-lg',
         ].join(' ')}
       >
-        <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+        <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4">
           <div>
-            <h2 id={titleId} className="text-base font-semibold text-slate-900">{title}</h2>
+            <h2 id={titleId} className="text-lg font-bold tracking-tight text-slate-950">{title}</h2>
             {description && <p className="mt-0.5 text-sm text-slate-500">{description}</p>}
           </div>
           <button

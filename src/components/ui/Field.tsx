@@ -13,7 +13,7 @@ interface FieldShellProps {
 export function Field({ id, label, error, hint, required, children }: FieldShellProps) {
   return (
     <div className="flex flex-col gap-1.5">
-      <label htmlFor={id} className="text-sm font-medium text-slate-700">
+      <label htmlFor={id} className="text-sm font-semibold text-slate-700">
         {label}
         {required && <span className="ml-0.5 text-rose-600" aria-hidden="true">*</span>}
         {required && <span className="sr-only"> (required)</span>}
@@ -30,8 +30,8 @@ export function Field({ id, label, error, hint, required, children }: FieldShell
 }
 
 const CONTROL =
-  'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 ' +
-  'placeholder:text-slate-400 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 ' +
+  'w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 shadow-sm ' +
+  'placeholder:text-slate-400 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 ' +
   'disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500'
 
 interface InputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'id'> {
