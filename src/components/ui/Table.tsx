@@ -1,13 +1,65 @@
-import type { ReactNode } from 'react'
+import { Children, cloneElement, isValidElement, type ReactElement, type ReactNode } from 'react'
+
+interface ElementWithChildren {
+  children?: ReactNode
+}
+
+interface TableCellProps {
+  align?: 'left' | 'right' | 'center'
+  children?: ReactNode
+  className?: string
+  colSpan?: number
+  mobileLabel?: string
+}
+
+function textContent(node: ReactNode): string {
+  if (typeof node === 'string' || typeof node === 'number') return String(node)
+  if (Array.isArray(node)) return node.map(textContent).join('')
+  if (isValidElement<ElementWithChildren>(node)) return textContent(node.props.children)
+  return ''
+}
+
+function collectHeaders(node: ReactNode): string[] {
+  const labels: string[] = []
+  Children.forEach(node, (child) => {
+    if (!isValidElement<ElementWithChildren>(child)) return
+    if (child.type === Th) {
+      labels.push(textContent(child.props.children).trim())
+      return
+    }
+    labels.push(...collectHeaders(child.props.children))
+  })
+  return labels
+}
+
+function labelCells(node: ReactNode, labels: string[]): ReactNode {
+  return Children.map(node, (child) => {
+    if (!isValidElement<ElementWithChildren>(child)) return child
+    if (child.type === Tr) {
+      let index = 0
+      const cells = Children.map(child.props.children, (cell) => {
+        if (!isValidElement<TableCellProps>(cell) || cell.type !== Td) return cell
+        const mobileLabel = labels[index] || `Column ${index + 1}`
+        index += 1
+        return cloneElement(cell as ReactElement<TableCellProps>, { mobileLabel })
+      })
+      return cloneElement(child, undefined, cells)
+    }
+    return cloneElement(child, undefined, labelCells(child.props.children, labels))
+  })
+}
 
 /**
- * Responsive table wrapper: horizontally scrollable on small screens so no
- * column is ever clipped off-screen.
+ * Tables become labeled record cards on phones and retain their full layout on
+ * larger screens.
  */
 export function TableWrap({ children }: { children: ReactNode }) {
+  const labels = collectHeaders(children)
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[640px] border-collapse text-sm">{children}</table>
+    <div className="responsive-table">
+      <table className="w-full border-collapse text-sm md:min-w-[640px]">
+        {labelCells(children, labels)}
+      </table>
     </div>
   )
 }
@@ -43,15 +95,18 @@ export function Td({
   align = 'left',
   className = '',
   colSpan,
+  mobileLabel,
 }: {
   children?: ReactNode
   align?: 'left' | 'right' | 'center'
   className?: string
   colSpan?: number
+  mobileLabel?: string
 }) {
   return (
     <td
       colSpan={colSpan}
+      data-label={mobileLabel}
       className={[
         'border-b border-slate-100 px-4 py-3 align-middle text-slate-700',
         align === 'right' && 'text-right',

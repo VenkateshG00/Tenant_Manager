@@ -207,6 +207,9 @@ tenant/financial data are not cached. On iOS, open the deployed site in Safari
 and choose **Share → Add to Home Screen**. On Android, use Chrome's **Install
 app** menu item.
 
+On phone and small-tablet screens, data tables display as labeled cards instead
+of requiring horizontal scrolling; desktop screens retain the full table layout.
+
 SPA routing is handled by `public/_redirects` (`/* /index.html 200`), which is
 copied into `dist` at build time — direct hits on `/statements` etc. work.
 

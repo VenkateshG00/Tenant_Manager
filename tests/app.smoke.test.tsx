@@ -54,6 +54,7 @@ describe('application shell', () => {
     render(<App />)
 
     fireEvent.click(await screen.findByRole('link', { name: 'Electricity Bills' }))
+    expect(document.querySelector('.responsive-table tbody td')).toHaveAttribute('data-label', 'Meter')
     fireEvent.click((await screen.findAllByRole('button', { name: '+ Add bill' }))[0]!)
 
     fireEvent.change(screen.getByLabelText(/Meter/), { target: { value: 'm-demo-2' } })

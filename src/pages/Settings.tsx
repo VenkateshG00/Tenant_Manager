@@ -69,7 +69,7 @@ export function SettingsPage() {
             </Row>
             {!isDemoMode && (
               <Row label="Project URL">
-                <span className="num break-all">{SUPABASE_URL}</span>
+                <span className="min-w-0 break-all font-mono text-xs sm:text-right">{SUPABASE_URL}</span>
               </Row>
             )}
             <Row label="Signed in as">{email ?? '—'}</Row>
