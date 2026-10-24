@@ -51,6 +51,54 @@
   overflow-x: auto;
 }
 
+@media print {
+  @page {
+    margin: 16mm;
+  }
+
+  body * {
+    visibility: hidden !important;
+  }
+
+  #print-report,
+  #print-report *,
+  #payment-receipt-print,
+  #payment-receipt-print * {
+    visibility: visible !important;
+  }
+
+  #print-report,
+  #payment-receipt-print {
+    display: block !important;
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    background: white;
+    color: black;
+    font: 11pt/1.4 Arial, sans-serif;
+  }
+
+  #print-report h1,
+  #payment-receipt-print h1 {
+    margin-bottom: 8pt;
+    font-size: 18pt;
+  }
+
+  #print-report table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 14pt;
+  }
+
+  #print-report th,
+  #print-report td,
+  #payment-receipt-print td {
+    border: 1px solid #cbd5e1;
+    padding: 6pt;
+    text-align: left;
+  }
+}
+
 @media (max-width: 767px) {
   .responsive-table {
     overflow: visible;

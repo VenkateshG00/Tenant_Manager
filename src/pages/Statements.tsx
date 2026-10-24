@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useStore } from '../app/AppState'
 import { useMonth } from '../app/MonthProvider'
 import { useToast } from '../app/Toast'
@@ -11,7 +11,8 @@ import { MonthSelect } from '../components/ui/MonthSelect'
 import { EmptyState, ErrorState, InlineNotice, LoadingBlock } from '../components/ui/States'
 import { TableWrap, Td, Th, Tr } from '../components/ui/Table'
 import { formatDate, formatMonth } from '../lib/dates'
-import { formatINR } from '../lib/money'
+import { formatINR, paiseToDecimalString } from '../lib/money'
+import { downloadCsv } from '../lib/csv'
 import type { StatementStatus } from '../lib/ledger'
 
 const STATUS_TONE: Record<StatementStatus, 'green' | 'sky' | 'amber' | 'rose'> = {
@@ -35,38 +36,6 @@ export function StatementsPage() {
   const workspace = useWorkspace()
   const [expanded, setExpanded] = useState<string | null>(null)
   const [filter, setFilter] = useState<'all' | 'outstanding' | 'settled'>('all')
-  const ensuredFor = useRef<string | null>(null)
-
-  useEffect(() => {
-    if (workspace.loading || workspace.error) return
-    if (ensuredFor.current === month) return
-    const active = workspace.tenants.filter((t) => t.isActive)
-    const missing = active.some(
-      (t) =>
-        !workspace.charges.some(
-          (c) => c.tenantId === t.id && c.chargeType === 'rent' && c.period === month,
-        ),
-    )
-    if (!missing) {
-      ensuredFor.current = month
-      return
-    }
-    let cancelled = false
-    void (async () => {
-      try {
-        await store.ensureRentCharges(month)
-        if (cancelled) return
-        ensuredFor.current = month
-        toast.success(`Rent charges ensured for ${formatMonth(month)}`)
-        workspace.reload()
-      } catch (error) {
-        if (!cancelled) toast.error(error instanceof Error ? error.message : String(error))
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [workspace, month, store, toast])
 
   const visible = useMemo(() => {
     if (filter === 'outstanding') {
@@ -101,16 +70,73 @@ export function StatementsPage() {
             <MonthSelect />
             <Button
               variant="secondary"
-              onClick={() => {
-                ensuredFor.current = null
-                workspace.reload()
-              }}
+              onClick={workspace.reload}
             >
               Recalculate
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                const tenantById = new Map(workspace.tenants.map((tenant) => [tenant.id, tenant]))
+                downloadCsv(`statements-${month}.csv`, [
+                  ['Month', 'Tenant', 'Room', 'Previous dues (INR)', 'Rent (INR)', 'Electricity (INR)', 'Other (INR)', 'Credits (INR)', 'Payments received (INR)', 'Outstanding (INR)', 'Status'],
+                  ...workspace.statements.map((statement) => {
+                    const tenant = tenantById.get(statement.tenantId)
+                    return [
+                      month,
+                      tenant?.name ?? '',
+                      tenant?.roomNumber ?? '',
+                      paiseToDecimalString(statement.previousOutstandingPaise),
+                      paiseToDecimalString(statement.rentPaise),
+                      paiseToDecimalString(statement.electricityPaise),
+                      paiseToDecimalString(statement.otherPaise),
+                      paiseToDecimalString(statement.creditPaise),
+                      paiseToDecimalString(statement.paymentsReceivedPaise),
+                      paiseToDecimalString(statement.outstandingPaise),
+                      statement.status,
+                    ]
+                  }),
+                ])
+              }}
+            >
+              Export CSV
+            </Button>
+            <Button variant="secondary" onClick={() => window.print()}>
+              Print / Save PDF
             </Button>
           </>
         }
       />
+
+      <section id="print-report" className="hidden" aria-hidden="true">
+        <h1>Monthly statements — {formatMonth(month)}</h1>
+        <table>
+          <thead>
+            <tr>
+              <th>Tenant</th><th>Room</th><th>Previous dues</th><th>Rent</th>
+              <th>Electricity</th><th>Other</th><th>Credits</th><th>Payments</th><th>Outstanding</th>
+            </tr>
+          </thead>
+          <tbody>
+            {workspace.statements.map((statement) => {
+              const tenant = workspace.tenants.find((item) => item.id === statement.tenantId)
+              return (
+                <tr key={statement.tenantId}>
+                  <td>{tenant?.name ?? '—'}</td>
+                  <td>{tenant?.roomNumber ?? '—'}</td>
+                  <td>{formatINR(statement.previousOutstandingPaise)}</td>
+                  <td>{formatINR(statement.rentPaise)}</td>
+                  <td>{formatINR(statement.electricityPaise)}</td>
+                  <td>{formatINR(statement.otherPaise)}</td>
+                  <td>{formatINR(statement.creditPaise)}</td>
+                  <td>{formatINR(statement.paymentsReceivedPaise)}</td>
+                  <td>{formatINR(statement.outstandingPaise)}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </section>
 
       {unmappedBills.length > 0 && (
         <div className="mb-4">

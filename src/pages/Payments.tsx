@@ -11,9 +11,10 @@ import { Input, Select, Textarea } from '../components/ui/Field'
 import { ConfirmDialog, Modal } from '../components/ui/Modal'
 import { EmptyState, ErrorState, InlineNotice, LoadingBlock } from '../components/ui/States'
 import { TableWrap, Td, Th, Tr } from '../components/ui/Table'
-import { formatINR, sumPaise } from '../lib/money'
+import { formatINR, paiseToDecimalString, sumPaise } from '../lib/money'
 import { formatDate, formatMonth, todayISO } from '../lib/dates'
 import { parseRupees } from '../lib/validation'
+import { downloadCsv } from '../lib/csv'
 import type { Charge, ChargeType, Payment, PaymentMethod } from '../data/types'
 
 const METHOD_LABEL: Record<PaymentMethod, string> = {
@@ -22,6 +23,12 @@ const METHOD_LABEL: Record<PaymentMethod, string> = {
   bank_transfer: 'Bank transfer',
   cheque: 'Cheque',
   other: 'Other',
+}
+
+interface PaymentReceipt {
+  payment: Payment
+  tenantName: string
+  allocations: { charge: Charge; amountPaise: number }[]
 }
 
 export function PaymentsPage() {
@@ -37,6 +44,7 @@ export function PaymentsPage() {
   const [formError, setFormError] = useState<string | null>(null)
   const [toDeletePayment, setToDeletePayment] = useState<Payment | null>(null)
   const [toDeleteCharge, setToDeleteCharge] = useState<Charge | null>(null)
+  const [receipt, setReceipt] = useState<PaymentReceipt | null>(null)
 
   const [payForm, setPayForm] = useState({
     tenantId: '',
@@ -119,7 +127,7 @@ export function PaymentsPage() {
     }
     setBusy(true)
     try {
-      await store.recordPayment({
+      const payment = await store.recordPayment({
         tenantId: payForm.tenantId,
         paymentDate: payForm.paymentDate,
         amountPaise: amount.paise,
@@ -127,9 +135,37 @@ export function PaymentsPage() {
         reference: payForm.reference.trim() || null,
         notes: payForm.notes.trim() || null,
       })
-      toast.success('Payment recorded and allocated to the oldest unpaid charges')
       setPayOpen(false)
       workspace.reload()
+      try {
+        const [charges, allocations] = await Promise.all([
+          store.listCharges(),
+          store.listAllocations(),
+        ])
+        const chargeById = new Map(charges.map((charge) => [charge.id, charge]))
+        setReceipt({
+          payment,
+          tenantName: tenantById.get(payment.tenantId)?.name ?? 'Tenant',
+          allocations: allocations
+            .filter((allocation) => allocation.paymentId === payment.id)
+            .flatMap((allocation) => {
+              const charge = chargeById.get(allocation.chargeId)
+              return charge ? [{ charge, amountPaise: allocation.amountPaise }] : []
+            }),
+        })
+        toast.success('Payment recorded and allocated to the oldest unpaid charges')
+      } catch (error) {
+        setReceipt({
+          payment,
+          tenantName: tenantById.get(payment.tenantId)?.name ?? 'Tenant',
+          allocations: [],
+        })
+        toast.error(
+          `Payment was saved, but receipt allocation details could not be loaded: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        )
+      }
     } catch (error) {
       setFormError(error instanceof Error ? error.message : String(error))
     } finally {
@@ -217,6 +253,26 @@ export function PaymentsPage() {
         description="Record money received and any other charges or credits. Payments are allocated to the oldest unpaid charge first."
         actions={
           <>
+            <Button
+              variant="secondary"
+              onClick={() => downloadCsv('payments.csv', [
+                ['Date', 'Tenant', 'Room', 'Amount (INR)', 'Method', 'Reference', 'Notes'],
+                ...workspace.payments.map((payment) => {
+                  const tenant = tenantById.get(payment.tenantId)
+                  return [
+                    payment.paymentDate,
+                    tenant?.name ?? 'Unknown',
+                    tenant?.roomNumber ?? '',
+                    paiseToDecimalString(payment.amountPaise),
+                    METHOD_LABEL[payment.method],
+                    payment.reference ?? '',
+                    payment.notes ?? '',
+                  ]
+                }),
+              ])}
+            >
+              Export CSV
+            </Button>
             <Button variant="secondary" onClick={openChargeModal}>
               + Other charge / credit
             </Button>
@@ -364,6 +420,106 @@ export function PaymentsPage() {
           )}
         </Card>
       </div>
+
+      <Modal
+        open={receipt !== null}
+        title="Payment receipt"
+        description="Payment recorded successfully. Share or print this receipt for your records."
+        onClose={() => setReceipt(null)}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setReceipt(null)}>Close</Button>
+            <Button
+              variant="secondary"
+              onClick={() => window.print()}
+            >
+              Print / Save PDF
+            </Button>
+            <Button
+              variant="primary"
+              onClick={() => {
+                if (!receipt) return
+                const text = [
+                  'Payment receipt — Rent & Electricity Manager',
+                  `Receipt: ${receipt.payment.id}`,
+                  `Tenant: ${receipt.tenantName}`,
+                  `Date: ${formatDate(receipt.payment.paymentDate)}`,
+                  `Amount: ${formatINR(receipt.payment.amountPaise)}`,
+                  `Method: ${METHOD_LABEL[receipt.payment.method]}`,
+                  receipt.payment.reference ? `Reference: ${receipt.payment.reference}` : '',
+                  ...receipt.allocations.map(
+                    ({ charge, amountPaise }) =>
+                      `Allocated: ${charge.chargeType} · ${formatMonth(charge.period)} · ${formatINR(amountPaise)}`,
+                  ),
+                  receipt.allocations.length === 0 ? 'Allocation: unallocated credit' : '',
+                ].filter(Boolean).join('\n')
+                if (navigator.share) {
+                  void navigator.share({ title: 'Payment receipt', text }).catch((error: unknown) => {
+                    if (error instanceof Error && error.name !== 'AbortError') {
+                      toast.error(`Could not share receipt: ${error.message}`)
+                    }
+                  })
+                } else if (navigator.clipboard?.writeText) {
+                  void navigator.clipboard.writeText(text).then(
+                    () => toast.success('Receipt details copied'),
+                    (error: unknown) => toast.error(`Could not copy receipt: ${error instanceof Error ? error.message : String(error)}`),
+                  )
+                } else {
+                  toast.error('Sharing and clipboard are unavailable. Use Print / Save PDF instead.')
+                }
+              }}
+            >
+              Share receipt
+            </Button>
+          </>
+        }
+      >
+        {receipt && (
+          <div className="space-y-3 text-sm">
+            <p><span className="font-medium">Receipt ID:</span> {receipt.payment.id}</p>
+            <p><span className="font-medium">Tenant:</span> {receipt.tenantName}</p>
+            <p><span className="font-medium">Date:</span> {formatDate(receipt.payment.paymentDate)}</p>
+            <p><span className="font-medium">Amount received:</span> {formatINR(receipt.payment.amountPaise)}</p>
+            <p><span className="font-medium">Method:</span> {METHOD_LABEL[receipt.payment.method]}</p>
+            {receipt.payment.reference && <p><span className="font-medium">Reference:</span> {receipt.payment.reference}</p>}
+            <div>
+              <p className="font-medium">Payment allocation</p>
+              {receipt.allocations.length === 0 ? (
+                <p className="text-slate-600">No charges were cleared; the amount remains an unallocated credit.</p>
+              ) : (
+                <ul className="mt-1 list-inside list-disc text-slate-600">
+                  {receipt.allocations.map(({ charge, amountPaise }) => (
+                    <li key={charge.id}>{charge.chargeType} · {formatMonth(charge.period)} · {formatINR(amountPaise)}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <section id="payment-receipt-print" className="hidden" aria-hidden="true">
+        {receipt && (
+          <>
+            <h1>Payment receipt</h1>
+            <p>Rent &amp; Electricity Manager</p>
+            <table>
+              <tbody>
+                <tr><th>Receipt ID</th><td>{receipt.payment.id}</td></tr>
+                <tr><th>Tenant</th><td>{receipt.tenantName}</td></tr>
+                <tr><th>Payment date</th><td>{formatDate(receipt.payment.paymentDate)}</td></tr>
+                <tr><th>Amount received</th><td>{formatINR(receipt.payment.amountPaise)}</td></tr>
+                <tr><th>Method</th><td>{METHOD_LABEL[receipt.payment.method]}</td></tr>
+                <tr><th>Reference</th><td>{receipt.payment.reference || '—'}</td></tr>
+                <tr>
+                  <th>Allocated to</th>
+                  <td>{receipt.allocations.map(({ charge, amountPaise }) => `${charge.chargeType} ${formatMonth(charge.period)} ${formatINR(amountPaise)}`).join('; ') || 'Unallocated credit'}</td>
+                </tr>
+              </tbody>
+            </table>
+          </>
+        )}
+      </section>
 
       <Modal
         open={payOpen}

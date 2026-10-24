@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { DemoStore } from '../src/data/demo/demoStore'
+import { currentMonthKey } from '../src/lib/dates'
 
 vi.mock('../src/app/env', () => ({
   isSupabaseConfigured: false,
@@ -60,6 +61,40 @@ describe('application shell', () => {
     fireEvent(document, new Event('visibilitychange'))
 
     await waitFor(() => expect(listBills.mock.calls.length).toBeGreaterThan(callsBeforeResume))
+  })
+
+  it('ensures rent charges when the app opens, without visiting statements', async () => {
+    window.localStorage.removeItem('tenant-app:billing-month')
+    const currentMonth = currentMonthKey()
+    const listCharges = DemoStore.prototype.listCharges
+    let hideRentOnce = true
+    vi.spyOn(DemoStore.prototype, 'listCharges').mockImplementation(async function (this: DemoStore) {
+      const charges = await listCharges.call(this)
+      if (!hideRentOnce) return charges
+      hideRentOnce = false
+      return charges.filter(
+        (charge) => !(charge.chargeType === 'rent' && charge.period === currentMonth),
+      )
+    })
+    const ensureRentCharges = vi.spyOn(DemoStore.prototype, 'ensureRentCharges')
+
+    render(<App />)
+    await screen.findByRole('heading', { name: /dashboard/i })
+
+    await waitFor(() => expect(ensureRentCharges).toHaveBeenCalledWith(currentMonth))
+  })
+
+  it('shows a printable/shareable receipt after recording a payment', async () => {
+    render(<App />)
+    fireEvent.click(await screen.findByRole('link', { name: 'Payments' }))
+    fireEvent.click(await screen.findByRole('button', { name: '+ Record payment' }))
+    fireEvent.change(screen.getByLabelText(/Amount \(₹\)/), { target: { value: '10.00' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save payment' }))
+
+    expect(await screen.findByRole('dialog', { name: 'Payment receipt' })).toBeInTheDocument()
+    expect(screen.getByText('Amount received:')).toBeInTheDocument()
+    expect(screen.getByText('Print / Save PDF')).toBeInTheDocument()
+    expect(screen.getByText('Share receipt')).toBeInTheDocument()
   })
 
   it('opens the official bill page for the selected meter and preselects it in the bill form', async () => {

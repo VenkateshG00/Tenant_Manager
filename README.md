@@ -40,6 +40,21 @@ npm run build     # production build → dist/
 | **Reminder History** | Every prepared/marked-sent reminder with the exact message text |
 | **Settings** | Connection status, JSON backup, audit trail, explanation of the balance rules |
 
+## Monthly operations and reports
+
+- Rent charges are ensured idempotently when the app loads and whenever the
+  selected billing month changes; this does not depend on opening Statements.
+  The app must be opened while online for a new month to be ensured—there is no
+  background server scheduler.
+- The dashboard flags positive balances carried forward from earlier months.
+  Bills flags unpaid bills past their due date and bills whose amount changed
+  by at least 50% and ₹100 compared with the latest earlier bill for that meter.
+- Statements can be exported to CSV or printed / saved as PDF from the browser.
+  Bills and payment history can also be exported to CSV.
+- Recording a payment opens a receipt that can be shared from supported devices
+  or printed / saved as PDF. The receipt includes the persisted payment ID and
+  its saved allocation details.
+
 ## Supabase setup
 
 ### 1. Create a project

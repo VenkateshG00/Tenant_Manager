@@ -1,6 +1,7 @@
 import { createContext, createElement, useContext, useEffect, useMemo, useRef } from 'react'
 import type { ReactNode } from 'react'
 import { useStore } from './AppState'
+import { useToast } from './Toast'
 import { useAsync } from './hooks'
 import { useMonth } from './MonthProvider'
 import {
@@ -39,6 +40,8 @@ const WorkspaceDataContext = createContext<WorkspaceData | null>(null)
 
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const store = useStore()
+  const toast = useToast()
+  const { month } = useMonth()
   const state = useAsync(async () => {
     const [tenants, meters, bills, charges, payments, allocations] = await Promise.all([
       store.listTenants(),
@@ -51,6 +54,39 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     return { tenants, meters, bills, charges, payments, allocations }
   }, [store])
   const { reload } = state
+  const ensuredRentCharges = useRef(new Set<string>())
+
+  useEffect(() => {
+    const data = state.data
+    if (state.loading || state.error || !data) return
+    const missingRentTenants = data.tenants
+      .filter((tenant) => tenant.isActive)
+      .filter(
+        (tenant) =>
+          !data.charges.some(
+            (charge) =>
+              charge.tenantId === tenant.id &&
+              charge.chargeType === 'rent' &&
+              charge.period === month,
+          ),
+      )
+    const unprocessed = missingRentTenants.filter(
+      (tenant) => !ensuredRentCharges.current.has(`${month}:${tenant.id}`),
+    )
+    if (unprocessed.length === 0) return
+
+    const keys = unprocessed.map((tenant) => `${month}:${tenant.id}`)
+    keys.forEach((key) => ensuredRentCharges.current.add(key))
+    void store.ensureRentCharges(month).then(
+      () => {
+        reload()
+      },
+      (error: unknown) => {
+        keys.forEach((key) => ensuredRentCharges.current.delete(key))
+        toast.error(error instanceof Error ? error.message : String(error))
+      },
+    )
+  }, [state.data, state.loading, state.error, month, store, reload, toast])
 
   const lastResumeRefresh = useRef(0)
   useEffect(() => {

@@ -11,8 +11,10 @@ import { ConfirmDialog, Modal } from '../components/ui/Modal'
 import { MonthSelect } from '../components/ui/MonthSelect'
 import { EmptyState, ErrorState, InlineNotice, LoadingBlock } from '../components/ui/States'
 import { TableWrap, Td, Th, Tr } from '../components/ui/Table'
-import { formatINR, paiseToInputValue } from '../lib/money'
-import { formatDate, formatMonth } from '../lib/dates'
+import { formatINR, paiseToDecimalString, paiseToInputValue } from '../lib/money'
+import { formatDate, formatMonth, todayISO } from '../lib/dates'
+import { overdueBills, unusualBillChanges } from '../lib/bill-alerts'
+import { downloadCsv } from '../lib/csv'
 import { parseRupees, validateHttpsUrl } from '../lib/validation'
 import { lookupUrlWithUsc } from '../lib/bill-provider'
 import { parseBillImportHash } from '../lib/bill-import'
@@ -316,6 +318,8 @@ export function BillsPage() {
   if (workspace.error) return <ErrorState message={workspace.error} onRetry={workspace.reload} />
 
   const pendingCount = workspace.bills.filter((b) => b.status === 'pending_verification').length
+  const overdue = overdueBills(workspace.bills, todayISO())
+  const billChanges = unusualBillChanges(workspace.bills, month)
 
   return (
     <>
@@ -337,6 +341,33 @@ export function BillsPage() {
           <InlineNotice tone="warning" title={`${pendingCount} bill${pendingCount === 1 ? '' : 's'} still need verification`}>
             Bills marked “needs verification” have not been checked against the official TGNPDCL
             page yet. Verify them before generating statements or sending reminders.
+          </InlineNotice>
+        </div>
+      )}
+
+      {overdue.length > 0 && (
+        <div className="mb-4">
+          <InlineNotice tone="danger" title={`${overdue.length} electricity bill${overdue.length === 1 ? '' : 's'} past the due date`}>
+            {overdue.map((bill) => (
+              <p key={bill.id}>
+                {meterById.get(bill.meterId)?.meterCode ?? 'Unknown meter'} · {formatMonth(bill.billingMonth)} ·{' '}
+                {formatINR(bill.amountPaise)} due {formatDate(bill.dueDate)}
+              </p>
+            ))}
+          </InlineNotice>
+        </div>
+      )}
+
+      {billChanges.length > 0 && (
+        <div className="mb-4">
+          <InlineNotice tone="warning" title={`Unusual bill change${billChanges.length === 1 ? '' : 's'} for ${formatMonth(month)}`}>
+            <p>Changes of 50% or more and at least ₹100 are flagged against the latest earlier bill. Check the meter reading before applying.</p>
+            {billChanges.map(({ bill, previousBill, changePercent, direction }) => (
+              <p key={bill.id}>
+                {meterById.get(bill.meterId)?.meterCode ?? 'Unknown meter'}: {formatINR(previousBill.amountPaise)} ({formatMonth(previousBill.billingMonth)}) →{' '}
+                {formatINR(bill.amountPaise)} ({direction} {changePercent}%)
+              </p>
+            ))}
           </InlineNotice>
         </div>
       )}
@@ -375,6 +406,28 @@ export function BillsPage() {
                 <option value={month}>{formatMonth(month)} only</option>
                 <option value="all">All months</option>
               </Select>
+              <Button
+                variant="secondary"
+                onClick={() => downloadCsv(`electricity-bills-${month}.csv`, [
+                  ['Meter', 'USC', 'Billing month', 'Amount (INR)', 'Generated date', 'Due date', 'Status', 'Source', 'Reference'],
+                  ...filtered.map((bill) => {
+                    const meter = meterById.get(bill.meterId)
+                    return [
+                      meter?.meterCode ?? 'Unknown',
+                      meter?.uscNumber ?? '',
+                      bill.billingMonth,
+                      paiseToDecimalString(bill.amountPaise),
+                      bill.billGeneratedAt ?? '',
+                      bill.dueDate ?? '',
+                      bill.status,
+                      bill.source,
+                      bill.billReference ?? '',
+                    ]
+                  }),
+                ])}
+              >
+                Export CSV
+              </Button>
             </div>
           }
         />

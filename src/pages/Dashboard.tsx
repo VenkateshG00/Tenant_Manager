@@ -5,7 +5,7 @@ import { MonthSelect } from '../components/ui/MonthSelect'
 import { Badge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
 import { Card, CardHeader, PageHeader, StatCard } from '../components/ui/Card'
-import { EmptyState, ErrorState, LoadingBlock } from '../components/ui/States'
+import { EmptyState, ErrorState, InlineNotice, LoadingBlock } from '../components/ui/States'
 import { TableWrap, Td, Th, Tr } from '../components/ui/Table'
 import { formatINR } from '../lib/money'
 import { formatDate, formatMonth } from '../lib/dates'
@@ -44,6 +44,9 @@ export function DashboardPage() {
   const recentPayments = workspace.payments.slice(0, 6)
   const activeMeters = workspace.meters.filter((m) => m.isActive)
   const unmapped = activeMeters.filter((m) => m.assignments.length === 0)
+  const overdueStatements = workspace.statements
+    .filter((statement) => statement.previousOutstandingPaise > 0)
+    .sort((a, b) => b.previousOutstandingPaise - a.previousOutstandingPaise)
 
   const meterFor = (meterId: string) =>
     workspace.meters.find((m) => m.id === meterId)?.meterCode ?? '—'
@@ -102,6 +105,27 @@ export function DashboardPage() {
           Refresh data
         </Button>
       </div>
+
+      {overdueStatements.length > 0 && (
+        <div className="mt-4">
+          <InlineNotice
+            tone="warning"
+            title={`${overdueStatements.length} tenant${overdueStatements.length === 1 ? '' : 's'} with overdue prior-month dues`}
+          >
+            <p>
+              {overdueStatements
+                .map((statement) => {
+                  const tenant = workspace.tenants.find((item) => item.id === statement.tenantId)
+                  return `${tenant?.name ?? 'Tenant'}: ${formatINR(statement.previousOutstandingPaise)}`
+                })
+                .join(' · ')}
+            </p>
+            <Link to="/statements" className="font-semibold underline">
+              Review statements
+            </Link>
+          </InlineNotice>
+        </div>
+      )}
 
       {unmapped.length > 0 && (
         <div className="mt-4">
