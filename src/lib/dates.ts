@@ -77,6 +77,17 @@ export function recentMonthKeys(endMonth: string, count = 12): string[] {
   return keys
 }
 
+/** Recent billing months, anchored to today while preserving an older selection. */
+export function billingMonthOptions(
+  currentMonth: string,
+  selectedMonth: string,
+  count = 24,
+): string[] {
+  const keys = recentMonthKeys(currentMonth, count)
+  if (!keys.includes(selectedMonth)) keys.push(selectedMonth)
+  return keys.sort((a, b) => b.localeCompare(a))
+}
+
 /** "2026-09-14" → "14 Sep 2026"; returns "" for empty input. */
 export function formatDate(isoDate: string | null | undefined): string {
   if (!isoDate) return ''

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  billingMonthOptions,
   currentMonthKey,
   formatDate,
   formatMonth,
@@ -28,6 +29,17 @@ describe('month keys', () => {
 
   it('lists recent months newest first', () => {
     expect(recentMonthKeys('2026-01', 3)).toEqual(['2026-01', '2025-12', '2025-11'])
+  })
+
+  it('keeps current months selectable when an older month is selected', () => {
+    const options = billingMonthOptions('2026-10', '2025-10', 24)
+    expect(options[0]).toBe('2026-10')
+    expect(options).toContain('2025-10')
+    expect(options).toContain('2024-11')
+  })
+
+  it('preserves a selected historical month outside the recent range', () => {
+    expect(billingMonthOptions('2026-10', '2020-05', 24)).toContain('2020-05')
   })
 
   it('formats month names', () => {

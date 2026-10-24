@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import { currentMonthKey, isMonthKey, recentMonthKeys } from '../lib/dates'
+import { billingMonthOptions, currentMonthKey, isMonthKey } from '../lib/dates'
 
 interface MonthApi {
   month: string
@@ -33,7 +33,10 @@ export function MonthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  const months = useMemo(() => recentMonthKeys(month, 24), [month])
+  const months = useMemo(
+    () => billingMonthOptions(currentMonthKey(), month, 24),
+    [month],
+  )
 
   const value = useMemo<MonthApi>(() => ({ month, setMonth, months }), [month, setMonth, months])
   return <MonthContext.Provider value={value}>{children}</MonthContext.Provider>
