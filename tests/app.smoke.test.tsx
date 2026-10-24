@@ -57,6 +57,11 @@ describe('application shell', () => {
     fireEvent.click((await screen.findAllByRole('button', { name: '+ Add bill' }))[0]!)
 
     fireEvent.change(screen.getByLabelText(/Meter/), { target: { value: 'm-demo-2' } })
+    expect(screen.getByLabelText('Selected meter USC')).toHaveValue('DEMO-USC-000002')
+    fireEvent.click(screen.getByRole('button', { name: 'Copy USC' }))
+    expect(
+      await screen.findByText(/USC copied|clipboard access|could not access/i, { selector: 'p' }),
+    ).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Open official bill page' }))
 
     expect(openSpy).toHaveBeenCalledWith(

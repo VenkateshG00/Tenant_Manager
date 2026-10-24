@@ -54,6 +54,7 @@ export function BillsPage() {
   const [open, setOpen] = useState(params.get('new') === '1')
   const [meterPickerOpen, setMeterPickerOpen] = useState(false)
   const [selectedMeterId, setSelectedMeterId] = useState('')
+  const [clipboardMessage, setClipboardMessage] = useState<string | null>(null)
   const [editing, setEditing] = useState<Bill | null>(null)
   const [form, setForm] = useState<BillForm>({
     meterId: '',
@@ -93,10 +94,12 @@ export function BillsPage() {
   }, [workspace.bills, onlyMonth, month, statusFilter, query, meterById])
 
   const activeMeters = workspace.meters.filter((m) => m.isActive)
+  const selectedMeter = meterById.get(selectedMeterId)
 
   const openCreate = () => {
     setEditing(null)
     setSelectedMeterId(activeMeters[0]?.id ?? '')
+    setClipboardMessage(null)
     setMeterPickerOpen(true)
     setFormError(null)
     if (params.get('new')) {
@@ -108,19 +111,33 @@ export function BillsPage() {
   const openProviderPage = (meterId: string): boolean => {
     const meter = meterById.get(meterId)
     if (!meter) {
-      setFormError('Choose an active meter')
+      setClipboardMessage('Choose an active meter')
       return false
     }
     const target = defaultBillProvider.lookupTarget(meter.uscNumber)
     window.open(target.url, '_blank', 'noopener,noreferrer')
-    if (navigator.clipboard?.writeText) {
-      void navigator.clipboard.writeText(meter.uscNumber)
-        .then(() => toast.success(`USC ${meter.uscNumber} copied. Paste it into the official form.`))
-        .catch(() => toast.push(`Enter USC ${meter.uscNumber} on the official page.`, 'info'))
-    } else {
-      toast.push(`Enter USC ${meter.uscNumber} on the official page.`, 'info')
-    }
+    void copyUsc(meter.uscNumber, true)
     return true
+  }
+
+  const copyUsc = async (uscNumber: string, notify = false) => {
+    const report = (message: string, copied = false) => {
+      setClipboardMessage(message)
+      if (notify) {
+        if (copied) toast.success(message)
+        else toast.push(message, 'info')
+      }
+    }
+    if (!navigator.clipboard?.writeText) {
+      report('Clipboard access is unavailable. Press and hold the USC field to copy it.')
+      return
+    }
+    try {
+      await navigator.clipboard.writeText(uscNumber)
+      report('USC copied. Paste it into the Unique Service No field on TGNPDCL.', true)
+    } catch {
+      report('Could not access the clipboard. Press and hold the USC field to copy it.')
+    }
   }
 
   const openOfficialLookup = (meterId: string) => {
@@ -445,7 +462,10 @@ export function BillsPage() {
               label="Meter"
               required
               value={selectedMeterId}
-              onChange={(event) => setSelectedMeterId(event.target.value)}
+              onChange={(event) => {
+                setSelectedMeterId(event.target.value)
+                setClipboardMessage(null)
+              }}
             >
               <option value="">Choose a meter…</option>
               {activeMeters.map((meter) => (
@@ -454,9 +474,42 @@ export function BillsPage() {
                 </option>
               ))}
             </Select>
+            {selectedMeter && (
+              <div className="grid grid-cols-1 items-end gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="selected-meter-usc" className="text-sm font-medium text-slate-700">
+                    USC / Unique Service No
+                  </label>
+                  <input
+                    id="selected-meter-usc"
+                    aria-label="Selected meter USC"
+                    readOnly
+                    value={selectedMeter.uscNumber}
+                    onClick={(event) => event.currentTarget.select()}
+                    onFocus={(event) => event.currentTarget.select()}
+                    className="min-h-11 w-full select-all rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-base font-semibold text-slate-900"
+                  />
+                </div>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="w-full sm:w-auto"
+                  onClick={() => void copyUsc(selectedMeter.uscNumber)}
+                >
+                  Copy USC
+                </Button>
+              </div>
+            )}
+            {clipboardMessage && (
+              <p role="status" className="text-sm text-slate-600">
+                {clipboardMessage}
+              </p>
+            )}
             <InlineNotice tone="info">
-              The official lookup opens in a new tab. The USC is copied when your browser permits;
-              paste it into TGNPDCL, check the amount, then return here to save the bill.
+              Open TGNPDCL, paste this USC into <strong>Unique Service No</strong>, then tap{' '}
+              <strong>Get Bill</strong>. After checking the bill, return here and enter its amount.
+              Clipboard access can vary by browser; the USC remains selectable above if copying is
+              unavailable.
             </InlineNotice>
           </div>
         )}

@@ -150,12 +150,14 @@ not bypass CAPTCHA.
 The working loop:
 
 1. **Bills → + Add bill** → select the meter. The app opens the official page
-   in a new tab and copies that meter's USC to the clipboard when permitted:
+   in a new tab and attempts to copy that meter's USC. You can also use **Copy
+   USC** before opening the page; if clipboard access is blocked, select and
+   copy the visible USC field:
    <https://tgnpdcl.com/Menu/KnowYourBillLT>
-2. Paste the USC into TGNPDCL, then compare the consumer name, billing month and
-   amount. Return to the already-open bill form, enter the amount and dates, and
-   save. The new bill appears in **Electricity bills** with **Needs verification**
-   status.
+2. Paste the USC into TGNPDCL's **Unique Service No** field and tap **Get Bill**.
+   Compare the consumer name, billing month and amount. Return to the already-open
+   bill form, enter the amount and dates, and save. The new bill appears in
+   **Electricity bills** with **Needs verification** status.
 3. **Verify & apply** marks it verified and creates the per-tenant electricity
    charges (split by allocation weights). Applying twice creates nothing new.
 
