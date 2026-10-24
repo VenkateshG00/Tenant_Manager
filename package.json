@@ -9,6 +9,7 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "test": "vitest run",
+    "test:extension": "node --test browser-extension/test/content.test.mjs",
     "typecheck": "tsc -b --force"
   },
   "dependencies": {

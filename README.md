@@ -142,32 +142,61 @@ Everything above is unit-tested in `tests/ledger.test.ts`.
 
 ## Electricity bills — manual verification workflow
 
-TGNPDCL does **not** publish a free authorised bill-enquiry API for LT consumers,
-and no eligible BBPS integration is connected here. The app therefore **never
-claims to fetch bills automatically**, does not scrape the provider site and does
-not bypass CAPTCHA.
+TGNPDCL does **not** publish an authorised bill-enquiry API for LT consumers,
+and no eligible BBPS integration is connected here. On desktop Chrome or Edge,
+an optional local browser extension can fill the USC, submit the official lookup,
+and read clearly labeled bill details from the provider page. The extension does
+not bypass CAPTCHA or other verification, and it does not save bills by itself.
+Without the extension, the app uses the manual workflow below.
 
 The working loop:
 
 1. **Bills → + Add bill** → select the meter. The app opens the official page
-   in a new tab and attempts to copy that meter's USC. You can also use **Copy
-   USC** before opening the page; if clipboard access is blocked, select and
-   copy the visible USC field:
+   in a new tab and attempts to copy that meter's USC. If the extension is
+   installed, it fills and submits the selected USC. Otherwise use **Copy USC**
+   and enter it manually. If clipboard access is blocked, select and copy the
+   visible USC field:
    <https://tgnpdcl.com/Menu/KnowYourBillLT>
-2. Paste the USC into TGNPDCL's **Unique Service No** field and tap **Get Bill**.
-   Compare the consumer name, billing month and amount. Return to the already-open
-   bill form, enter the amount and dates, and save. The new bill appears in
-   **Electricity bills** with **Needs verification** status.
+2. Without the extension, paste the USC into TGNPDCL's **Unique Service No**
+   field and tap **Get Bill**. With it, review the detected amount/date panel
+   and choose **Review in Tenant Manager**. In either path, compare the consumer,
+   month, amount and due date, then save the bill. New bills remain in
+   **Needs verification** status.
 3. **Verify & apply** marks it verified and creates the per-tenant electricity
    charges (split by allocation weights). Applying twice creates nothing new.
 
-The official page does not document a supported USC-prefill URL, and a web app
-cannot read another site's page or form values. The flow therefore does not
-automatically fill TGNPDCL's form or capture its result; the USC is copied for
-easy pasting and the bill amount must be entered after checking it yourself.
+The PWA itself cannot fill or read another site's form. The optional extension
+uses the visible official page, removes the USC handoff fragment before the
+provider receives a request, and sends detected details back to the PWA in a
+URL fragment. The fragment is not sent to the app server; the app validates it,
+matches it to an active meter, and opens a review form. Only **Save bill** sends
+the reviewed details through the app's existing data store. The extension
+extracts labeled text only—if the provider changes its page or shows a
+verification challenge, finish the lookup manually.
 
-The USC is **not** appended as a URL parameter: the official page documents no
-supported way to pre-fill it, and inventing parameters would silently break.
+### Optional desktop browser helper (Chrome / Edge)
+
+The extension runs locally in the browser on macOS and Windows. It requests
+access only to `https://tgnpdcl.com/*`; it has no background service, remote
+code, or separate data-collection endpoint.
+
+1. Download/clone this repository on the computer and open
+   `chrome://extensions` in Chrome or `edge://extensions` in Edge.
+2. Turn on **Developer mode**, choose **Load unpacked**, and select the
+   repository's `browser-extension` folder.
+3. Keep the extension enabled and use **Bills → + Add bill** in the PWA. It
+   opens the selected meter's TGNPDCL lookup. The extension fills the USC and
+   submits the normal official form.
+4. When it finds a clearly labeled amount, choose **Review in Tenant Manager**.
+   Confirm the values in the PWA's bill form and click **Save bill**.
+
+The browser helper is an early, page-structure-dependent integration. It has
+not been validated against a successful live consumer bill response; selectors
+and result labels may need adjustment. It deliberately does not solve CAPTCHA,
+submit payment, mark bills verified, or save data without your review. If it
+cannot recognize the result, enter the details manually.
+
+Run its local DOM tests with `npm run test:extension`.
 
 Bill retrieval sits behind a provider adapter (`src/lib/bill-provider/`). A real,
 tested integration can be added there later without touching the rest of the app.

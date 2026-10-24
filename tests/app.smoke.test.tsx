@@ -66,7 +66,7 @@ describe('application shell', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Open official bill page' }))
 
     expect(openSpy).toHaveBeenCalledWith(
-      'https://tgnpdcl.com/Menu/KnowYourBillLT',
+      'https://tgnpdcl.com/Menu/KnowYourBillLT#tenant-manager-usc=DEMO-USC-000002',
       '_blank',
       'noopener,noreferrer',
     )

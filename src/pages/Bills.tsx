@@ -1,5 +1,5 @@
-import { useMemo, useState, type FormEvent } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { useLocation, useSearchParams } from 'react-router-dom'
 import { useMonth } from '../app/MonthProvider'
 import { useWorkspace } from '../app/useWorkspace'
 import { useToast } from '../app/Toast'
@@ -14,7 +14,8 @@ import { TableWrap, Td, Th, Tr } from '../components/ui/Table'
 import { formatINR, paiseToInputValue } from '../lib/money'
 import { formatDate, formatMonth } from '../lib/dates'
 import { parseRupees, validateHttpsUrl } from '../lib/validation'
-import { defaultBillProvider } from '../lib/bill-provider'
+import { lookupUrlWithUsc } from '../lib/bill-provider'
+import { parseBillImportHash } from '../lib/bill-import'
 import { useStore } from '../app/AppState'
 import type { Bill, BillSource, BillStatus } from '../data/types'
 
@@ -49,23 +50,27 @@ export function BillsPage() {
   const toast = useToast()
   const workspace = useWorkspace()
   const { month } = useMonth()
+  const location = useLocation()
   const [params, setParams] = useSearchParams()
 
-  const [open, setOpen] = useState(params.get('new') === '1')
+  const [importDraft, setImportDraft] = useState(() => parseBillImportHash(window.location.hash))
+  const [open, setOpen] = useState(params.get('new') === '1' || Boolean(importDraft))
   const [meterPickerOpen, setMeterPickerOpen] = useState(false)
   const [selectedMeterId, setSelectedMeterId] = useState('')
   const [clipboardMessage, setClipboardMessage] = useState<string | null>(null)
   const [editing, setEditing] = useState<Bill | null>(null)
   const [form, setForm] = useState<BillForm>({
     meterId: '',
-    billingMonth: month,
-    amount: '',
-    billGeneratedAt: '',
-    dueDate: '',
-    billReference: '',
+    billingMonth: importDraft?.billingMonth ?? month,
+    amount: importDraft?.amount ?? '',
+    billGeneratedAt: importDraft?.billGeneratedAt ?? '',
+    dueDate: importDraft?.dueDate ?? '',
+    billReference: importDraft?.billReference ?? '',
     receiptUrl: '',
     source: 'official_lookup',
-    notes: '',
+    notes: importDraft
+      ? 'Imported from the TGNPDCL browser helper. Review all details before saving.'
+      : '',
   })
   const [formError, setFormError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -74,8 +79,16 @@ export function BillsPage() {
   const [query, setQuery] = useState('')
   const [toDelete, setToDelete] = useState<Bill | null>(null)
   const [lookupBill, setLookupBill] = useState<Bill | null>(null)
+  const importHandled = useRef(false)
 
   const meterById = useMemo(() => new Map(workspace.meters.map((m) => [m.id, m])), [workspace.meters])
+  const importedMeter = importDraft
+    ? workspace.meters.find(
+        (candidate) => candidate.isActive && candidate.uscNumber === importDraft.uscNumber,
+      )
+    : undefined
+  const formMeterId = form.meterId || (importDraft ? importedMeter?.id ?? '' : '')
+  const importNotice = Boolean(importDraft && !editing)
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -96,8 +109,42 @@ export function BillsPage() {
   const activeMeters = workspace.meters.filter((m) => m.isActive)
   const selectedMeter = meterById.get(selectedMeterId)
 
+  useEffect(() => {
+    if (
+      workspace.loading ||
+      importHandled.current ||
+      !window.location.hash.includes('tenant-manager-bill=')
+    ) {
+      return
+    }
+    importHandled.current = true
+    window.history.replaceState(window.history.state, '', `${location.pathname}${location.search}`)
+    if (!importDraft) {
+      toast.error('The browser helper returned bill details in an invalid format.')
+      return
+    }
+
+    if (!importedMeter) {
+      toast.error(
+        `No active meter matches USC ${importDraft.uscNumber}. Check the meter setup before importing.`,
+      )
+      return
+    }
+
+    toast.push('Bill details imported. Review the amount and dates before saving.', 'info')
+  }, [
+    workspace.loading,
+    location.pathname,
+    location.search,
+    toast,
+    importDraft,
+    importedMeter,
+  ])
+
   const openCreate = () => {
+    setOpen(false)
     setEditing(null)
+    setImportDraft(null)
     setSelectedMeterId(activeMeters[0]?.id ?? '')
     setClipboardMessage(null)
     setMeterPickerOpen(true)
@@ -114,8 +161,7 @@ export function BillsPage() {
       setClipboardMessage('Choose an active meter')
       return false
     }
-    const target = defaultBillProvider.lookupTarget(meter.uscNumber)
-    window.open(target.url, '_blank', 'noopener,noreferrer')
+    window.open(lookupUrlWithUsc(meter.uscNumber), '_blank', 'noopener,noreferrer')
     void copyUsc(meter.uscNumber, true)
     return true
   }
@@ -144,6 +190,7 @@ export function BillsPage() {
     if (!openProviderPage(meterId)) return
     const meter = meterById.get(meterId)
     if (!meter) return
+    setImportDraft(null)
     setForm({
       meterId,
       billingMonth: month,
@@ -162,6 +209,7 @@ export function BillsPage() {
 
   const openEdit = (bill: Bill) => {
     setEditing(bill)
+    setImportDraft(null)
     setForm({
       meterId: bill.meterId,
       billingMonth: bill.billingMonth,
@@ -179,7 +227,7 @@ export function BillsPage() {
 
   const save = async () => {
     setFormError(null)
-    if (!form.meterId) {
+    if (!formMeterId) {
       setFormError('Choose a meter')
       return
     }
@@ -196,7 +244,7 @@ export function BillsPage() {
     setBusy(true)
     try {
       const payload = {
-        meterId: form.meterId,
+        meterId: formMeterId,
         billingMonth: form.billingMonth,
         amountPaise: amount.paise,
         billGeneratedAt: form.billGeneratedAt || null,
@@ -215,6 +263,7 @@ export function BillsPage() {
         toast.success('Bill saved as “needs verification”')
       }
       setOpen(false)
+      setImportDraft(null)
       workspace.reload()
     } catch (error) {
       setFormError(error instanceof Error ? error.message : String(error))
@@ -388,8 +437,11 @@ export function BillsPage() {
                         <Button
                           size="sm"
                           onClick={() => {
-                            const target = defaultBillProvider.lookupTarget(meter?.uscNumber ?? '')
-                            window.open(target.url, '_blank', 'noopener,noreferrer')
+                            window.open(
+                              lookupUrlWithUsc(meter?.uscNumber ?? ''),
+                              '_blank',
+                              'noopener,noreferrer',
+                            )
                             setLookupBill(bill)
                           }}
                         >
@@ -516,10 +568,13 @@ export function BillsPage() {
       </Modal>
 
       <Modal
-        open={open}
+        open={open && (!importDraft || Boolean(importedMeter))}
         wide
         title={editing ? 'Edit bill' : 'Record electricity bill'}
-        onClose={() => setOpen(false)}
+        onClose={() => {
+          setOpen(false)
+          setImportDraft(null)
+        }}
         footer={
           <>
             <Button variant="secondary" onClick={() => setOpen(false)} disabled={busy}>
@@ -538,27 +593,34 @@ export function BillsPage() {
             void save()
           }}
         >
-          <InlineNotice tone="info">
-            Check the bill on the official page, then enter the amount below. This app cannot read
-            the external page, so the bill is not saved until you enter the amount and choose Save.
-            New bills start as <strong>needs verification</strong>. When editing, the current status
-            is preserved.
-          </InlineNotice>
+          {importNotice ? (
+            <InlineNotice tone="warning" title="Review imported bill details">
+              The browser helper filled this form from the TGNPDCL page. Confirm the meter, amount,
+              and dates against the bill before saving. It will remain <strong>needs verification</strong>.
+            </InlineNotice>
+          ) : (
+            <InlineNotice tone="info">
+              Check the bill on the official page, then enter the amount below. This app cannot read
+              the external page, so the bill is not saved until you enter the amount and choose Save.
+              New bills start as <strong>needs verification</strong>. When editing, the current status
+              is preserved.
+            </InlineNotice>
+          )}
 
-          {!editing && meterById.get(form.meterId) && (
+          {!editing && meterById.get(formMeterId) && (
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-slate-50 p-3">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                   USC / Service number
                 </p>
                 <p className="num mt-1 font-semibold text-slate-900">
-                  {meterById.get(form.meterId)?.uscNumber}
+                  {meterById.get(formMeterId)?.uscNumber}
                 </p>
               </div>
               <Button
                 type="button"
                 variant="secondary"
-                onClick={() => openProviderPage(form.meterId)}
+                onClick={() => openProviderPage(formMeterId)}
               >
                 Reopen official page
               </Button>
@@ -569,7 +631,7 @@ export function BillsPage() {
             <Select
               label="Meter"
               required
-              value={form.meterId}
+              value={formMeterId}
               disabled={!editing}
               onChange={(e) => setForm((f) => ({ ...f, meterId: e.target.value }))}
               hint="Only active meters are listed."
@@ -685,7 +747,7 @@ export function BillsPage() {
               variant="secondary"
               onClick={() =>
                 window.open(
-                  defaultBillProvider.lookupTarget(meterById.get(lookupBill.meterId)?.uscNumber ?? '').url,
+                  lookupUrlWithUsc(meterById.get(lookupBill.meterId)?.uscNumber ?? ''),
                   '_blank',
                   'noopener,noreferrer',
                 )

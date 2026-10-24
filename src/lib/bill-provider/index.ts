@@ -4,15 +4,13 @@ import { TGNPDCL_LOOKUP_URL } from '../whatsapp'
 /**
  * TGNPDCL / TSNPDCL (Telangana) adapter.
  *
- * Automatic fetching is NOT implemented: TGNPDCL does not publish a free
- * authorised bill-enquiry API for LT consumers, and no eligible BBPS
- * integration has been wired up or tested here. The adapter therefore opens
- * the official "Know Your Bill (LT)" page and the administrator enters the
- * amount manually after checking it against the USC.
+ * No authorised bill-enquiry API or eligible BBPS integration is connected.
+ * The optional desktop browser helper works with the official page itself;
+ * without that extension, the administrator completes the lookup and entry
+ * manually.
  *
- * The USC is intentionally NOT appended to the URL — the official page does
- * not document a supported way to pre-fill it, and inventing query
- * parameters would silently break.
+ * The provider URL stays unchanged. The optional desktop extension receives
+ * the selected USC in a URL fragment, which the provider server never gets.
  */
 export const tgnpdclAdapter: BillProviderAdapter = {
   id: 'tgnpdcl',
@@ -25,7 +23,7 @@ export const tgnpdclAdapter: BillProviderAdapter = {
       identifier: { label: 'USC / Service Number', value: uscNumber },
       instructions: [
         'The official page opens in a new tab.',
-        'Enter the USC shown here into the "Know Your Bill" form.',
+        'With the desktop helper installed, it fills and submits the USC automatically; otherwise enter it manually.',
         'Confirm the consumer name and the billing month match this meter.',
         'Copy the bill amount and due date, then verify and save the bill here.',
       ],
@@ -38,3 +36,10 @@ export const billProviders: Record<string, BillProviderAdapter> = {
 }
 
 export const defaultBillProvider = tgnpdclAdapter
+
+export function lookupUrlWithUsc(uscNumber: string): string {
+  const url = defaultBillProvider.lookupTarget(uscNumber).url
+  return uscNumber
+    ? `${url}#tenant-manager-usc=${encodeURIComponent(uscNumber)}`
+    : url
+}

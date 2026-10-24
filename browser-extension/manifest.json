@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "Tenant Manager — TGNPDCL Bill Helper",
+  "version": "1.0.0",
+  "description": "Fills the selected TGNPDCL USC and prepares detected bill details for your review.",
+  "permissions": [],
+  "host_permissions": ["https://tgnpdcl.com/*"],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://tgnpdcl.com/Menu/KnowYourBillLT*",
+        "https://tgnpdcl.com/Consumer/DuplicateBillValidate*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_start"
+    }
+  ]
+}

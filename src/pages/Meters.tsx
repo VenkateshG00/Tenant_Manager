@@ -10,7 +10,7 @@ import { Input, Select, Textarea } from '../components/ui/Field'
 import { ConfirmDialog, Modal } from '../components/ui/Modal'
 import { EmptyState, ErrorState, InlineNotice, LoadingBlock } from '../components/ui/States'
 import { TableWrap, Td, Th, Tr } from '../components/ui/Table'
-import { defaultBillProvider } from '../lib/bill-provider'
+import { defaultBillProvider, lookupUrlWithUsc } from '../lib/bill-provider'
 import type { AssignmentInput, Meter, MeterArrangement, MeterInput } from '../data/types'
 
 interface AssignmentDraft {
@@ -198,9 +198,8 @@ export function MetersPage() {
   }
 
   const openLookup = (meter: Meter) => {
-    const target = defaultBillProvider.lookupTarget(meter.uscNumber)
     setLookupMeter(meter)
-    window.open(target.url, '_blank', 'noopener,noreferrer')
+    window.open(lookupUrlWithUsc(meter.uscNumber), '_blank', 'noopener,noreferrer')
   }
 
   if (workspace.loading) return <LoadingBlock label="Loading meters" />
