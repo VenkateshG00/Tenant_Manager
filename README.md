@@ -23,7 +23,7 @@ the fastest way to click through the whole workflow.
 ```bash
 npm run lint      # oxlint
 npm run typecheck # tsc
-npm test          # vitest (62 tests)
+npm test          # vitest
 npm run build     # production build → dist/
 ```
 
@@ -52,6 +52,7 @@ Create a project at [supabase.com](https://supabase.com) — the free tier is en
 
 1. `supabase/migrations/0001_initial_schema.sql`
 2. `supabase/migrations/0002_rls_policies.sql`
+3. `supabase/migrations/0003_audit_triggers.sql`
 
 **Option B — Supabase CLI:**
 
@@ -60,9 +61,13 @@ supabase link --project-ref <your-project-ref>
 supabase db push
 ```
 
-Both migrations are idempotent (safe to re-run). They create the tables, enums,
-indexes, unique constraints, RLS policies and the two RPCs (`is_admin`,
-`ensure_rent_charges`, `record_payment_with_allocations`).
+The migrations are idempotent (safe to re-run). They create the tables, enums,
+indexes, unique constraints, RLS policies, the RPCs (`is_admin`,
+`ensure_rent_charges`, `record_payment_with_allocations`), and database triggers
+that append create/update/delete events for tenants, meters, assignments, bills,
+charges, payments, payment allocations and reminders to `audit_logs`. Audit
+triggers execute in the same transaction as the change. Existing changes are
+not backfilled; the log starts recording when migration 0003 is applied.
 
 ### 3. Create the administrator account
 
@@ -194,6 +199,12 @@ outstanding. Reminder logs store the exact text so you can re-check what was sen
    `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
 5. Deploy.
 
+The Vite build generates a PWA manifest, install icons and a service worker.
+Only the static application shell/assets are precached; Supabase requests and
+tenant/financial data are not cached. On iOS, open the deployed site in Safari
+and choose **Share → Add to Home Screen**. On Android, use Chrome's **Install
+app** menu item.
+
 SPA routing is handled by `public/_redirects` (`/* /index.html 200`), which is
 copied into `dist` at build time — direct hits on `/statements` etc. work.
 
@@ -230,7 +241,7 @@ paid infrastructure. The provider adapter interface is already in place.
 
 ## Testing — what is and is not covered
 
-**Automated (62 tests, `npm test`):** money parsing/formatting, HTTPS receipt URL
+**Automated (63 tests, `npm test`):** money parsing/formatting, HTTPS receipt URL
 validation, Asia/Kolkata date
 handling, Indian phone normalisation, WhatsApp link building and URL encoding, the
 FIFO allocation engine, statement maths (previous dues, partial payments, full
