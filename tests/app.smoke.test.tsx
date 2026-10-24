@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { DemoStore } from '../src/data/demo/demoStore'
 
 vi.mock('../src/app/env', () => ({
   isSupabaseConfigured: false,
@@ -47,6 +48,18 @@ describe('application shell', () => {
       const links = await screen.findAllByRole('link', { name: label })
       expect(links.length).toBeGreaterThan(0)
     }
+  })
+
+  it('refreshes workspace records when the app becomes visible again', async () => {
+    const listBills = vi.spyOn(DemoStore.prototype, 'listBills')
+    render(<App />)
+    await screen.findByRole('heading', { name: /dashboard/i })
+    await waitFor(() => expect(listBills).toHaveBeenCalled())
+    const callsBeforeResume = listBills.mock.calls.length
+
+    fireEvent(document, new Event('visibilitychange'))
+
+    await waitFor(() => expect(listBills.mock.calls.length).toBeGreaterThan(callsBeforeResume))
   })
 
   it('opens the official bill page for the selected meter and preselects it in the bill form', async () => {

@@ -1,4 +1,4 @@
-import { createContext, createElement, useContext, useMemo } from 'react'
+import { createContext, createElement, useContext, useEffect, useMemo, useRef } from 'react'
 import type { ReactNode } from 'react'
 import { useStore } from './AppState'
 import { useAsync } from './hooks'
@@ -50,6 +50,30 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     ])
     return { tenants, meters, bills, charges, payments, allocations }
   }, [store])
+  const { reload } = state
+
+  const lastResumeRefresh = useRef(0)
+  useEffect(() => {
+    const refreshWhenActive = () => {
+      if (document.visibilityState !== 'visible') return
+      const now = Date.now()
+      if (now - lastResumeRefresh.current < 5000) return
+      lastResumeRefresh.current = now
+      reload()
+    }
+    const refreshFromPageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) refreshWhenActive()
+    }
+
+    document.addEventListener('visibilitychange', refreshWhenActive)
+    window.addEventListener('online', refreshWhenActive)
+    window.addEventListener('pageshow', refreshFromPageShow)
+    return () => {
+      document.removeEventListener('visibilitychange', refreshWhenActive)
+      window.removeEventListener('online', refreshWhenActive)
+      window.removeEventListener('pageshow', refreshFromPageShow)
+    }
+  }, [reload])
 
   const value = useMemo<WorkspaceData>(
     () => ({ data: state.data, loading: state.loading, error: state.error, reload: state.reload }),
