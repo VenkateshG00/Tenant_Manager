@@ -180,6 +180,43 @@ describe('computeStatement', () => {
   it('rejects invalid periods', () => {
     expect(() => computeStatement('t1', '2026-13', charges, payments, allocations)).toThrow()
   })
+
+  it('keeps future payments out of an earlier month statement', () => {
+    const febCharge = charge({
+      id: 'feb-rent',
+      tenantId: 't1',
+      chargeType: 'rent',
+      period: '2026-02',
+      chargeDate: '2026-02-01',
+      amountPaise: 10000,
+    })
+    const febPayment = payment({
+      id: 'feb-payment',
+      tenantId: 't1',
+      paymentDate: '2026-02-28',
+      amountPaise: 5000,
+    })
+    const marchPayment = payment({
+      id: 'march-payment',
+      tenantId: 't1',
+      paymentDate: '2026-03-01',
+      amountPaise: 5000,
+    })
+    const allocations = [
+      { paymentId: febPayment.id, chargeId: febCharge.id, amountPaise: 5000 },
+      { paymentId: marchPayment.id, chargeId: febCharge.id, amountPaise: 5000 },
+    ]
+
+    const february = computeStatement('t1', '2026-02', [febCharge], [febPayment, marchPayment], allocations)
+    expect(february.allocatedPaise).toBe(5000)
+    expect(february.lines[0]?.paidPaise).toBe(5000)
+    expect(february.lines[0]?.balancePaise).toBe(5000)
+    expect(february.payments.map((p) => p.id)).toEqual(['feb-payment'])
+
+    const march = computeStatement('t1', '2026-03', [febCharge], [febPayment, marchPayment], allocations)
+    expect(march.allocatedPaise).toBe(10000)
+    expect(march.lines[0]?.balancePaise).toBe(0)
+  })
 })
 
 describe('splitAmountByWeights', () => {

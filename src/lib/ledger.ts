@@ -188,6 +188,8 @@ export function computeStatement(
   const paidByCharge = new Map<string, Paise>()
   for (const allocation of allocations) {
     if (!chargeIdToAmount.has(allocation.chargeId)) continue
+    const paymentDate = paymentDates.get(allocation.paymentId)
+    if (!paymentDate || monthOf(paymentDate) > period) continue
     paidByCharge.set(
       allocation.chargeId,
       (paidByCharge.get(allocation.chargeId) ?? 0) + allocation.amountPaise,
@@ -229,7 +231,7 @@ export function computeStatement(
         const charge = tenantCharges.find((c) => c.id === a.chargeId)
         if (!charge || monthOf(charge.chargeDate) > period) return false
         const paymentDate = paymentDates.get(a.paymentId)
-        return paymentDate !== undefined && paymentDate <= `${period}-31`
+        return paymentDate !== undefined && monthOf(paymentDate) <= period
       })
       .map((a) => a.amountPaise),
   )
@@ -262,7 +264,7 @@ export function computeStatement(
     outstandingPaise,
     status,
     lines,
-    payments: sortPayments(tenantPayments.filter((p) => p.paymentDate <= `${period}-31`)).reverse(),
+    payments: sortPayments(tenantPayments.filter((p) => monthOf(p.paymentDate) <= period)).reverse(),
   }
 }
 

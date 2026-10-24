@@ -23,7 +23,7 @@ the fastest way to click through the whole workflow.
 ```bash
 npm run lint      # oxlint
 npm run typecheck # tsc
-npm test          # vitest (59 tests)
+npm test          # vitest (62 tests)
 npm run build     # production build → dist/
 ```
 
@@ -144,16 +144,20 @@ not bypass CAPTCHA.
 
 The working loop:
 
-1. **Electricity Meters → View official bill** (or **Bills → Official bill**)
-   opens the official page in a new tab:
+1. **Bills → + Add bill** → select the meter. The app opens the official page
+   in a new tab and copies that meter's USC to the clipboard when permitted:
    <https://tgnpdcl.com/Menu/KnowYourBillLT>
-2. Enter the USC shown in the app on that page.
-3. Compare the consumer name, month and amount.
-4. **Bills → + Add bill** → pick meter, month, amount, dates. The source field
-   records whether you cross-checked the official page or are entering from a
-   paper bill. The bill is saved as **Needs verification**.
-5. **Verify & apply** — marks it verified and creates the per-tenant electricity
+2. Paste the USC into TGNPDCL, then compare the consumer name, billing month and
+   amount. Return to the already-open bill form, enter the amount and dates, and
+   save. The new bill appears in **Electricity bills** with **Needs verification**
+   status.
+3. **Verify & apply** marks it verified and creates the per-tenant electricity
    charges (split by allocation weights). Applying twice creates nothing new.
+
+The official page does not document a supported USC-prefill URL, and a web app
+cannot read another site's page or form values. The flow therefore does not
+automatically fill TGNPDCL's form or capture its result; the USC is copied for
+easy pasting and the bill amount must be entered after checking it yourself.
 
 The USC is **not** appended as a URL parameter: the official page documents no
 supported way to pre-fill it, and inventing parameters would silently break.
@@ -169,7 +173,7 @@ No WhatsApp Business API is used and **nothing is ever sent automatically**.
 | --- | --- |
 | **Send via WhatsApp — Choose Contact** | Opens `https://api.whatsapp.com/send?text=<encoded>` — WhatsApp opens with the text prefilled and *you* pick the recipient. Recipient-selection support varies between the WhatsApp mobile app, desktop app and WhatsApp Web. |
 | **Send to saved number** | Opens `https://wa.me/91XXXXXXXXXX?text=<encoded>` for a validated Indian mobile number (10 digits starting 6–9; `+91`/`0` prefixes normalised). Shown only when a valid number is saved. |
-| **Copy message** | Clipboard fallback (with `execCommand` fallback for older browsers) when WhatsApp cannot be opened. |
+| **Copy message** | Uses the browser clipboard API; if permission is unavailable, the message preview can be copied manually. |
 | **Mark as sent** | Records *your* statement that you sent it. The app never claims delivery or read status — clicking a link proves nothing. |
 
 Messages are generated from live statement data (`buildReminderMessage`), never
@@ -226,12 +230,14 @@ paid infrastructure. The provider adapter interface is already in place.
 
 ## Testing — what is and is not covered
 
-**Automated (59 tests, `npm test`):** money parsing/formatting, Asia/Kolkata date
+**Automated (62 tests, `npm test`):** money parsing/formatting, HTTPS receipt URL
+validation, Asia/Kolkata date
 handling, Indian phone normalisation, WhatsApp link building and URL encoding, the
 FIFO allocation engine, statement maths (previous dues, partial payments, full
-payment, credits, no double-counting), shared-meter weight splitting, demo-store
-guards (duplicate bills, idempotent rent charges, delete protection), and a smoke
-test that renders the full app in demo mode.
+payment, credits, no double-counting, and month-end payment boundaries),
+shared-meter weight splitting, demo-store guards (duplicate bills, idempotent rent
+charges, delete protection), and smoke tests that render the full app in demo mode
+regardless of local Supabase environment variables.
 
 **Not automated — verify manually against a real Supabase project:**
 

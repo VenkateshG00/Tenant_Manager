@@ -150,7 +150,7 @@ export function PaymentsPage() {
       setFormError(amount.error)
       return
     }
-    const paise = chargeForm.chargeType === 'credit' ? amount.paise : amount.paise
+    const paise = amount.paise
     setBusy(true)
     try {
       await store.createCharge({

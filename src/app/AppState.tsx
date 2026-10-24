@@ -13,6 +13,7 @@ interface AppState {
   supabase: SupabaseClient | null
   status: AuthStatus
   email: string | null
+  authError: string | null
   signIn(email: string, password: string): Promise<{ ok: boolean; error?: string }>
   signOut(): Promise<void>
   refresh(): Promise<void>
@@ -41,8 +42,10 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
   const [status, setStatus] = useState<AuthStatus>(supabase ? 'loading' : 'authenticated')
   const [email, setEmail] = useState<string | null>(null)
+  const [authError, setAuthError] = useState<string | null>(null)
 
   const applySession = useCallback((session: Session | null) => {
+    setAuthError(null)
     if (session?.user?.email) {
       setEmail(session.user.email)
       setStatus('authenticated')
@@ -55,9 +58,23 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!supabase) return
     let cancelled = false
-    supabase.auth.getSession().then(({ data }) => {
-      if (!cancelled) applySession(data.session ?? null)
-    })
+    supabase.auth.getSession()
+      .then(({ data, error }) => {
+        if (cancelled) return
+        if (error) {
+          setEmail(null)
+          setStatus('anonymous')
+          setAuthError(`Could not check your session: ${error.message}`)
+          return
+        }
+        applySession(data.session ?? null)
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return
+        setEmail(null)
+        setStatus('anonymous')
+        setAuthError(`Could not check your session: ${error instanceof Error ? error.message : String(error)}`)
+      })
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
       applySession(session)
     })
@@ -70,13 +87,17 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const signIn = useCallback(
     async (inputEmail: string, inputPassword: string) => {
       if (!supabase) return { ok: false, error: 'Supabase is not configured' }
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: inputEmail.trim(),
-        password: inputPassword,
-      })
-      if (error) return { ok: false, error: error.message }
-      applySession(data.session ?? null)
-      return { ok: true }
+      try {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: inputEmail.trim(),
+          password: inputPassword,
+        })
+        if (error) return { ok: false, error: error.message }
+        applySession(data.session ?? null)
+        return { ok: true }
+      } catch (error) {
+        return { ok: false, error: error instanceof Error ? error.message : String(error) }
+      }
     },
     [supabase, applySession],
   )
@@ -93,8 +114,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   }, [supabase, applySession])
 
   const value = useMemo<AppState>(
-    () => ({ store, supabase, status, email, signIn, signOut, refresh }),
-    [store, supabase, status, email, signIn, signOut, refresh],
+    () => ({ store, supabase, status, email, authError, signIn, signOut, refresh }),
+    [store, supabase, status, email, authError, signIn, signOut, refresh],
   )
 
   return <AppStateContext.Provider value={value}>{children}</AppStateContext.Provider>

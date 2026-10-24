@@ -123,15 +123,24 @@ export function StatementsPage() {
               className="font-semibold underline"
               onClick={() => {
                 void (async () => {
+                  let applied = 0
+                  const failures: string[] = []
                   for (const bill of unmappedBills) {
                     try {
-                      await store.applyBill(bill.id)
+                      applied += await store.applyBill(bill.id)
                     } catch (error) {
-                      toast.error(error instanceof Error ? error.message : String(error))
+                      failures.push(error instanceof Error ? error.message : String(error))
                     }
                   }
-                  toast.success('Applied verified bills to tenant charges')
-                  workspace.reload()
+                  if (applied > 0) {
+                    toast.success(`Created ${applied} electricity charge${applied === 1 ? '' : 's'}`)
+                    workspace.reload()
+                  }
+                  if (failures.length > 0) {
+                    toast.error(`${failures.length} bill${failures.length === 1 ? '' : 's'} could not be applied: ${failures.join('; ')}`)
+                  } else if (applied === 0) {
+                    toast.success('No new electricity charges were needed')
+                  }
                 })()
               }}
             >

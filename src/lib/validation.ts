@@ -22,7 +22,7 @@ export function parseRupees(
   }
   let paise: number
   try {
-    paise = toPaisesSafe(trimmed)
+    paise = toPaise(trimmed)
   } catch {
     return { ok: false, error: `${label} is not a valid amount` }
   }
@@ -31,14 +31,24 @@ export function parseRupees(
   return { ok: true, paise }
 }
 
-function toPaisesSafe(value: string): number {
-  return toPaise(value)
-}
-
 export function validatePhone(value: string): string | null {
   if (!value || value.trim() === '') return null // phone is optional
   const result = normalizeIndianPhone(value)
   return result.ok ? null : result.reason
+}
+
+export function validateHttpsUrl(value: string, label: string, optional = true): string | null {
+  const trimmed = value.trim()
+  if (!trimmed) return optional ? null : `${label} is required`
+  try {
+    const url = new URL(trimmed)
+    if (url.protocol !== 'https:' || !url.hostname || url.username || url.password) {
+      return `${label} must be a valid HTTPS URL`
+    }
+    return null
+  } catch {
+    return `${label} must be a valid HTTPS URL`
+  }
 }
 
 export function validateMonthKey(value: string, label = 'Billing month'): string | null {

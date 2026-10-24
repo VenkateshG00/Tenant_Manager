@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useId, useRef } from 'react'
 import type { ReactNode } from 'react'
 import { Button } from './Button'
 
@@ -15,6 +15,12 @@ interface ModalProps {
 export function Modal({ open, title, description, onClose, children, footer, wide }: ModalProps) {
   const panelRef = useRef<HTMLDivElement>(null)
   const previouslyFocused = useRef<HTMLElement | null>(null)
+  const onCloseRef = useRef(onClose)
+  const titleId = useId()
+
+  useEffect(() => {
+    onCloseRef.current = onClose
+  }, [onClose])
 
   useEffect(() => {
     if (!open) return
@@ -22,7 +28,7 @@ export function Modal({ open, title, description, onClose, children, footer, wid
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.stopPropagation()
-        onClose()
+        onCloseRef.current()
         return
       }
       if (event.key !== 'Tab' || !panelRef.current) return
@@ -43,7 +49,11 @@ export function Modal({ open, title, description, onClose, children, footer, wid
     }
     document.addEventListener('keydown', onKeyDown, true)
     const id = window.setTimeout(() => {
-      panelRef.current?.querySelector<HTMLElement>('input, select, textarea, button')?.focus()
+      const panel = panelRef.current
+      if (!panel) return
+      const field = panel.querySelector<HTMLElement>('input:not([disabled]), select:not([disabled]), textarea:not([disabled])')
+      const fallback = panel.querySelector<HTMLElement>('button:not([disabled])')
+      ;(field ?? fallback)?.focus()
     }, 20)
     document.body.style.overflow = 'hidden'
     return () => {
@@ -52,7 +62,7 @@ export function Modal({ open, title, description, onClose, children, footer, wid
       document.body.style.overflow = ''
       previouslyFocused.current?.focus?.()
     }
-  }, [open, onClose])
+  }, [open])
 
   if (!open) return null
 
@@ -67,15 +77,15 @@ export function Modal({ open, title, description, onClose, children, footer, wid
         ref={panelRef}
         role="dialog"
         aria-modal="true"
-        aria-label={title}
+        aria-labelledby={titleId}
         className={[
-          'flex max-h-[92vh] w-full flex-col rounded-t-2xl bg-white shadow-xl sm:rounded-2xl',
+          'flex max-h-[92vh] max-h-[92dvh] w-full flex-col rounded-t-2xl bg-white pb-[env(safe-area-inset-bottom)] shadow-xl sm:rounded-2xl sm:pb-0',
           wide ? 'sm:max-w-3xl' : 'sm:max-w-lg',
         ].join(' ')}
       >
         <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
           <div>
-            <h2 className="text-base font-semibold text-slate-900">{title}</h2>
+            <h2 id={titleId} className="text-base font-semibold text-slate-900">{title}</h2>
             {description && <p className="mt-0.5 text-sm text-slate-500">{description}</p>}
           </div>
           <button

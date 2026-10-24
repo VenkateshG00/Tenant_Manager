@@ -26,7 +26,8 @@ export interface ReminderMessageInput {
 }
 
 function inr(value: Paise): string {
-  return formatINR(value).replace(/ /g, ' ')
+  // Keep the currency symbol attached to the amount in WhatsApp's text layout.
+  return formatINR(value).replace(/\u00a0/g, ' ')
 }
 
 /**
@@ -86,7 +87,7 @@ export function openWhatsApp(url: string): void {
   window.open(url, '_blank', 'noopener,noreferrer')
 }
 
-/** Clipboard copy with a document.execCommand fallback for older browsers. */
+/** Copy using the browser clipboard API when available. */
 export async function copyToClipboard(text: string): Promise<boolean> {
   try {
     if (navigator.clipboard?.writeText) {
@@ -94,20 +95,7 @@ export async function copyToClipboard(text: string): Promise<boolean> {
       return true
     }
   } catch {
-    // fall through to the legacy path
-  }
-  try {
-    const area = document.createElement('textarea')
-    area.value = text
-    area.setAttribute('readonly', '')
-    area.style.position = 'fixed'
-    area.style.opacity = '0'
-    document.body.appendChild(area)
-    area.select()
-    const ok = document.execCommand('copy')
-    document.body.removeChild(area)
-    return ok
-  } catch {
     return false
   }
+  return false
 }

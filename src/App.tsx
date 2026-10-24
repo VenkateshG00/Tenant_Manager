@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import type { ReactNode } from 'react'
 import { AppStateProvider, useAppState } from './app/AppState'
 import { MonthProvider } from './app/MonthProvider'
+import { WorkspaceProvider } from './app/useWorkspace'
 import { ToastProvider } from './app/Toast'
 import { Layout } from './components/Layout'
 import { Spinner } from './components/ui/States'
@@ -19,7 +20,7 @@ function RequireAuth({ children }: { children: ReactNode }) {
   const { status } = useAppState()
   if (status === 'loading') {
     return (
-      <div className="flex min-h-screen items-center justify-center">
+      <div className="flex min-h-screen min-h-dvh items-center justify-center">
         <Spinner label="Checking your session" />
       </div>
     )
@@ -39,7 +40,9 @@ export default function App() {
               <Route
                 element={
                   <RequireAuth>
-                    <Layout />
+                    <WorkspaceProvider>
+                      <Layout />
+                    </WorkspaceProvider>
                   </RequireAuth>
                 }
               >

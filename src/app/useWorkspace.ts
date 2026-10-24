@@ -1,12 +1,14 @@
-import { useMemo } from 'react'
+import { createContext, createElement, useContext, useMemo } from 'react'
+import type { ReactNode } from 'react'
 import { useStore } from './AppState'
 import { useAsync } from './hooks'
 import { useMonth } from './MonthProvider'
 import {
-  computeMonthOverview,
   computeStatement,
+  type MonthOverview,
   type TenantStatement,
 } from '../lib/ledger'
+import { sumPaise } from '../lib/money'
 import type {
   Allocation, Bill, Charge, Meter, Payment, ReminderLog, Tenant,
 } from '../data/types'
@@ -20,20 +22,23 @@ export interface Workspace {
   allocations: Allocation[]
   statements: TenantStatement[]
   statementsByTenant: Map<string, TenantStatement>
+  overview: MonthOverview
   loading: boolean
   error: string | null
   reload(): void
 }
 
-/**
- * Loads every ledger row once and derives statements + the month overview.
- * The demo store and the Supabase store both feed this, so the maths is
- * identical in both modes.
- */
-export function useWorkspace(): Workspace {
-  const store = useStore()
-  const { month } = useMonth()
+interface WorkspaceData {
+  data: Pick<Workspace, 'tenants' | 'meters' | 'bills' | 'charges' | 'payments' | 'allocations'> | null
+  loading: boolean
+  error: string | null
+  reload(): void
+}
 
+const WorkspaceDataContext = createContext<WorkspaceData | null>(null)
+
+export function WorkspaceProvider({ children }: { children: ReactNode }) {
+  const store = useStore()
   const state = useAsync(async () => {
     const [tenants, meters, bills, charges, payments, allocations] = await Promise.all([
       store.listTenants(),
@@ -46,8 +51,26 @@ export function useWorkspace(): Workspace {
     return { tenants, meters, bills, charges, payments, allocations }
   }, [store])
 
+  const value = useMemo<WorkspaceData>(
+    () => ({ data: state.data, loading: state.loading, error: state.error, reload: state.reload }),
+    [state.data, state.loading, state.error, state.reload],
+  )
+
+  return createElement(WorkspaceDataContext.Provider, { value }, children)
+}
+
+/**
+ * Loads every ledger row once and derives statements + the month overview.
+ * The demo store and the Supabase store both feed this, so the maths is
+ * identical in both modes.
+ */
+export function useWorkspace(): Workspace {
+  const shared = useContext(WorkspaceDataContext)
+  if (!shared) throw new Error('useWorkspace must be used inside WorkspaceProvider')
+  const { month } = useMonth()
+
   const derived = useMemo(() => {
-    const data = state.data
+    const data = shared.data
     if (!data) {
       return {
         tenants: [] as Tenant[],
@@ -58,12 +81,46 @@ export function useWorkspace(): Workspace {
         allocations: [] as Allocation[],
         statements: [] as TenantStatement[],
         statementsByTenant: new Map<string, TenantStatement>(),
+        overview: {
+          period: month,
+          expectedRentPaise: 0,
+          electricityChargedPaise: 0,
+          otherChargedPaise: 0,
+          creditPaise: 0,
+          paymentsReceivedPaise: 0,
+          previousDuesPaise: 0,
+          outstandingPaise: 0,
+          activeTenantCount: 0,
+          paidCount: 0,
+          partialCount: 0,
+          unpaidCount: 0,
+        } satisfies MonthOverview,
       }
     }
-    const { tenants, meters, bills, charges, payments, allocations } = data
+    const { tenants, meters, charges, allocations } = data
+    const bills = [...data.bills].sort(
+      (a, b) => b.billingMonth.localeCompare(a.billingMonth) || b.createdAt.localeCompare(a.createdAt),
+    )
+    const payments = [...data.payments].sort(
+      (a, b) => b.paymentDate.localeCompare(a.paymentDate) || b.createdAt.localeCompare(a.createdAt),
+    )
     const statements = tenants
       .filter((t) => t.isActive)
       .map((t) => computeStatement(t.id, month, charges, payments, allocations))
+    const overview: MonthOverview = {
+      period: month,
+      expectedRentPaise: sumPaise(statements.map((s) => s.rentPaise)),
+      electricityChargedPaise: sumPaise(statements.map((s) => s.electricityPaise)),
+      otherChargedPaise: sumPaise(statements.map((s) => s.otherPaise)),
+      creditPaise: sumPaise(statements.map((s) => s.creditPaise)),
+      paymentsReceivedPaise: sumPaise(statements.map((s) => s.paymentsReceivedPaise)),
+      previousDuesPaise: sumPaise(statements.map((s) => s.previousOutstandingPaise)),
+      outstandingPaise: sumPaise(statements.map((s) => s.outstandingPaise)),
+      activeTenantCount: statements.length,
+      paidCount: statements.filter((s) => s.status === 'settled' || s.status === 'credit').length,
+      partialCount: statements.filter((s) => s.status === 'partially_paid').length,
+      unpaidCount: statements.filter((s) => s.status === 'unpaid').length,
+    }
     return {
       tenants,
       meters,
@@ -73,34 +130,24 @@ export function useWorkspace(): Workspace {
       allocations,
       statements,
       statementsByTenant: new Map(statements.map((s) => [s.tenantId, s])),
+      overview,
     }
-  }, [state.data, month])
+  }, [shared.data, month])
 
   return useMemo<Workspace>(
     () => ({
       ...derived,
-      loading: state.loading,
-      error: state.error,
-      reload: state.reload,
+      loading: shared.loading,
+      error: shared.error,
+      reload: shared.reload,
     }),
-    [derived, state.loading, state.error, state.reload],
+    [derived, shared.loading, shared.error, shared.reload],
   )
 }
 
 /** Month overview used by the dashboard cards. */
 export function useMonthOverview(workspace: Workspace) {
-  const { month } = useMonth()
-  return useMemo(
-    () =>
-      computeMonthOverview(
-        month,
-        workspace.tenants.map((t) => ({ id: t.id, isActive: t.isActive })),
-        workspace.charges,
-        workspace.payments,
-        workspace.allocations,
-      ),
-    [month, workspace.tenants, workspace.charges, workspace.payments, workspace.allocations],
-  )
+  return workspace.overview
 }
 
 /** Convenience: latest reminder log per tenant for a period. */

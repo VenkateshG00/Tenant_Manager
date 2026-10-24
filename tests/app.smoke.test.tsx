@@ -1,6 +1,16 @@
-import { describe, expect, it } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+
+vi.mock('../src/app/env', () => ({
+  isSupabaseConfigured: false,
+  isDemoMode: true,
+  SUPABASE_ANON_KEY: '',
+  SUPABASE_URL: '',
+}))
+
 import App from '../src/App'
+
+afterEach(() => vi.restoreAllMocks())
 
 /**
  * End-to-end-ish smoke test in demo mode: the router, providers, workspace
@@ -37,5 +47,25 @@ describe('application shell', () => {
       const links = await screen.findAllByRole('link', { name: label })
       expect(links.length).toBeGreaterThan(0)
     }
+  })
+
+  it('opens the official bill page for the selected meter and preselects it in the bill form', async () => {
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(null)
+    render(<App />)
+
+    fireEvent.click(await screen.findByRole('link', { name: 'Electricity Bills' }))
+    fireEvent.click((await screen.findAllByRole('button', { name: '+ Add bill' }))[0]!)
+
+    fireEvent.change(screen.getByLabelText(/Meter/), { target: { value: 'm-demo-2' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Open official bill page' }))
+
+    expect(openSpy).toHaveBeenCalledWith(
+      'https://tgnpdcl.com/Menu/KnowYourBillLT',
+      '_blank',
+      'noopener,noreferrer',
+    )
+    expect(await screen.findByRole('heading', { name: 'Record electricity bill' })).toBeInTheDocument()
+    expect(screen.getByText('DEMO-USC-000002')).toBeInTheDocument()
+    expect(screen.getByLabelText(/Meter/)).toHaveValue('m-demo-2')
   })
 })

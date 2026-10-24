@@ -7,10 +7,20 @@
 @layer base {
   html {
     -webkit-text-size-adjust: 100%;
+    min-height: 100%;
   }
 
   body {
     @apply bg-slate-50 text-slate-900 antialiased;
+    min-height: 100dvh;
+  }
+
+  @media (pointer: coarse) {
+    button,
+    input,
+    select {
+      min-height: 44px;
+    }
   }
 
   :focus-visible {

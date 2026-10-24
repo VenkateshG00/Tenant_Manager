@@ -13,7 +13,7 @@ import { EmptyState, ErrorState, InlineNotice, LoadingBlock } from '../component
 import { TableWrap, Td, Th, Tr } from '../components/ui/Table'
 import { formatINR, paiseToInputValue } from '../lib/money'
 import { formatDate, formatMonth } from '../lib/dates'
-import { parseRupees } from '../lib/validation'
+import { parseRupees, validateHttpsUrl } from '../lib/validation'
 import { defaultBillProvider } from '../lib/bill-provider'
 import { useStore } from '../app/AppState'
 import type { Bill, BillSource, BillStatus } from '../data/types'
@@ -52,6 +52,8 @@ export function BillsPage() {
   const [params, setParams] = useSearchParams()
 
   const [open, setOpen] = useState(params.get('new') === '1')
+  const [meterPickerOpen, setMeterPickerOpen] = useState(false)
+  const [selectedMeterId, setSelectedMeterId] = useState('')
   const [editing, setEditing] = useState<Bill | null>(null)
   const [form, setForm] = useState<BillForm>({
     meterId: '',
@@ -94,8 +96,39 @@ export function BillsPage() {
 
   const openCreate = () => {
     setEditing(null)
+    setSelectedMeterId(activeMeters[0]?.id ?? '')
+    setMeterPickerOpen(true)
+    setFormError(null)
+    if (params.get('new')) {
+      params.delete('new')
+      setParams(params, { replace: true })
+    }
+  }
+
+  const openProviderPage = (meterId: string): boolean => {
+    const meter = meterById.get(meterId)
+    if (!meter) {
+      setFormError('Choose an active meter')
+      return false
+    }
+    const target = defaultBillProvider.lookupTarget(meter.uscNumber)
+    window.open(target.url, '_blank', 'noopener,noreferrer')
+    if (navigator.clipboard?.writeText) {
+      void navigator.clipboard.writeText(meter.uscNumber)
+        .then(() => toast.success(`USC ${meter.uscNumber} copied. Paste it into the official form.`))
+        .catch(() => toast.push(`Enter USC ${meter.uscNumber} on the official page.`, 'info'))
+    } else {
+      toast.push(`Enter USC ${meter.uscNumber} on the official page.`, 'info')
+    }
+    return true
+  }
+
+  const openOfficialLookup = (meterId: string) => {
+    if (!openProviderPage(meterId)) return
+    const meter = meterById.get(meterId)
+    if (!meter) return
     setForm({
-      meterId: activeMeters[0]?.id ?? '',
+      meterId,
       billingMonth: month,
       amount: '',
       billGeneratedAt: '',
@@ -107,10 +140,7 @@ export function BillsPage() {
     })
     setFormError(null)
     setOpen(true)
-    if (params.get('new')) {
-      params.delete('new')
-      setParams(params, { replace: true })
-    }
+    setMeterPickerOpen(false)
   }
 
   const openEdit = (bill: Bill) => {
@@ -141,6 +171,11 @@ export function BillsPage() {
       setFormError(amount.error)
       return
     }
+    const receiptUrlError = validateHttpsUrl(form.receiptUrl, 'Receipt URL')
+    if (receiptUrlError) {
+      setFormError(receiptUrlError)
+      return
+    }
     setBusy(true)
     try {
       const payload = {
@@ -159,13 +194,8 @@ export function BillsPage() {
         await store.updateBill(editing.id, payload)
         toast.success('Bill updated')
       } else {
-        const created = await store.createBill(payload)
+        await store.createBill(payload)
         toast.success('Bill saved as “needs verification”')
-        if (form.source === 'official_lookup') {
-          const target = defaultBillProvider.lookupTarget(meterById.get(form.meterId)?.uscNumber ?? '')
-          window.open(target.url, '_blank', 'noopener,noreferrer')
-          setLookupBill(created)
-        }
       }
       setOpen(false)
       workspace.reload()
@@ -385,6 +415,54 @@ export function BillsPage() {
       </Card>
 
       <Modal
+        open={meterPickerOpen}
+        title="Choose the meter to check"
+        description="Select a meter to open its official TGNPDCL bill lookup."
+        onClose={() => setMeterPickerOpen(false)}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setMeterPickerOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              onClick={() => openOfficialLookup(selectedMeterId)}
+              disabled={!selectedMeterId}
+            >
+              Open official bill page
+            </Button>
+          </>
+        }
+      >
+        {activeMeters.length === 0 ? (
+          <EmptyState
+            title="No active meters"
+            description="Add or reactivate a meter before recording an electricity bill."
+          />
+        ) : (
+          <div className="space-y-4">
+            <Select
+              label="Meter"
+              required
+              value={selectedMeterId}
+              onChange={(event) => setSelectedMeterId(event.target.value)}
+            >
+              <option value="">Choose a meter…</option>
+              {activeMeters.map((meter) => (
+                <option key={meter.id} value={meter.id}>
+                  {meter.meterCode} · USC {meter.uscNumber} · {meter.roomLabel}
+                </option>
+              ))}
+            </Select>
+            <InlineNotice tone="info">
+              The official lookup opens in a new tab. The USC is copied when your browser permits;
+              paste it into TGNPDCL, check the amount, then return here to save the bill.
+            </InlineNotice>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
         open={open}
         wide
         title={editing ? 'Edit bill' : 'Record electricity bill'}
@@ -408,16 +486,38 @@ export function BillsPage() {
           }}
         >
           <InlineNotice tone="info">
-            This app never fetches bills automatically. Open the official page, read the amount for
-            this USC, then enter it here. The bill is saved as <strong>needs verification</strong>{' '}
-            until you confirm it.
+            Check the bill on the official page, then enter the amount below. This app cannot read
+            the external page, so the bill is not saved until you enter the amount and choose Save.
+            New bills start as <strong>needs verification</strong>. When editing, the current status
+            is preserved.
           </InlineNotice>
+
+          {!editing && meterById.get(form.meterId) && (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-slate-50 p-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  USC / Service number
+                </p>
+                <p className="num mt-1 font-semibold text-slate-900">
+                  {meterById.get(form.meterId)?.uscNumber}
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => openProviderPage(form.meterId)}
+              >
+                Reopen official page
+              </Button>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Select
               label="Meter"
               required
               value={form.meterId}
+              disabled={!editing}
               onChange={(e) => setForm((f) => ({ ...f, meterId: e.target.value }))}
               hint="Only active meters are listed."
             >
@@ -473,6 +573,7 @@ export function BillsPage() {
               type="url"
               value={form.receiptUrl}
               onChange={(e) => setForm((f) => ({ ...f, receiptUrl: e.target.value }))}
+              error={formError?.startsWith('Receipt URL') ? formError : undefined}
               hint="A link to a photo or scan you have stored elsewhere."
             />
           </div>

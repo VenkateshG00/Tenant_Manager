@@ -20,8 +20,8 @@ export function Layout() {
   const [open, setOpen] = useState(false)
 
   return (
-    <div className="min-h-screen">
-      <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
+    <div className="min-h-screen min-h-dvh">
+      <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 pt-[env(safe-area-inset-top)] backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3">
           <div className="flex items-center gap-3">
             <button
@@ -62,6 +62,7 @@ export function Layout() {
 
         <nav
           id="primary-nav"
+          aria-label="Primary navigation"
           className={[
             'border-t border-slate-100 bg-white',
             open ? 'block' : 'hidden',
@@ -93,11 +94,11 @@ export function Layout() {
         </nav>
       </header>
 
-      <main className="mx-auto max-w-7xl px-4 py-6">
+      <main className="mx-auto max-w-7xl px-4 py-5 sm:px-6 sm:py-6 lg:px-8">
         <Outlet />
       </main>
 
-      <footer className="mx-auto max-w-7xl px-4 pb-8 text-xs text-slate-400">
+      <footer className="mx-auto max-w-7xl px-4 pb-[max(2rem,env(safe-area-inset-bottom))] text-xs text-slate-400 sm:px-6 lg:px-8">
         Amounts in INR (₹) · Dates in Asia/Kolkata · WhatsApp reminders are sent manually by the
         administrator.
       </footer>

@@ -33,16 +33,6 @@ export class SupabaseStore implements AppStore {
     this.client = client
   }
 
-  private async requireAdmin(): Promise<void> {
-    const { data, error } = await this.client.rpc('is_admin')
-    if (error) throw new Error(`Authorization check failed: ${error.message}`)
-    if (data !== true) {
-      throw new Error(
-        'This account is not registered as an administrator. Add its user id to the admins table (see README).',
-      )
-    }
-  }
-
   async ping(): Promise<void> {
     const { error } = await this.client.from('tenants').select('id').limit(1)
     if (error) throw new Error(`Cannot reach Supabase: ${error.message}`)
@@ -57,7 +47,6 @@ export class SupabaseStore implements AppStore {
   }
 
   async createTenant(input: TenantInput): Promise<Tenant> {
-    await this.requireAdmin()
     const { data, error } = await this.client
       .from('tenants')
       .insert({
@@ -75,7 +64,6 @@ export class SupabaseStore implements AppStore {
   }
 
   async updateTenant(id: string, patch: Partial<TenantInput>): Promise<void> {
-    await this.requireAdmin()
     const row: Record<string, unknown> = {}
     if (patch.name !== undefined) row.name = patch.name
     if (patch.roomNumber !== undefined) row.room_number = patch.roomNumber
@@ -93,7 +81,6 @@ export class SupabaseStore implements AppStore {
   }
 
   async deleteTenant(id: string): Promise<void> {
-    await this.requireAdmin()
     const { count } = await this.client
       .from('charges').select('id', { count: 'exact', head: true }).eq('tenant_id', id)
     const { count: payCount } = await this.client
@@ -126,7 +113,6 @@ export class SupabaseStore implements AppStore {
   }
 
   async createMeter(input: MeterInput, assignments: AssignmentInput[]): Promise<Meter> {
-    await this.requireAdmin()
     const { data, error } = await this.client
       .from('electricity_meters')
       .insert({
@@ -156,7 +142,6 @@ export class SupabaseStore implements AppStore {
   }
 
   async updateMeter(id: string, patch: Partial<MeterInput>): Promise<void> {
-    await this.requireAdmin()
     const row: Record<string, unknown> = {}
     if (patch.meterCode !== undefined) row.meter_code = patch.meterCode
     if (patch.uscNumber !== undefined) row.usc_number = patch.uscNumber
@@ -169,7 +154,6 @@ export class SupabaseStore implements AppStore {
   }
 
   async setMeterAssignments(meterId: string, assignments: AssignmentInput[]): Promise<void> {
-    await this.requireAdmin()
     const { error: delError } = await this.client
       .from('meter_tenant_assignments').delete().eq('meter_id', meterId)
     if (delError) return fail(delError.message)
@@ -186,7 +170,6 @@ export class SupabaseStore implements AppStore {
   }
 
   async deleteMeter(id: string): Promise<void> {
-    await this.requireAdmin()
     const { count } = await this.client
       .from('electricity_bills').select('id', { count: 'exact', head: true }).eq('meter_id', id)
     if ((count ?? 0) > 0) {
@@ -210,15 +193,15 @@ export class SupabaseStore implements AppStore {
       bill.meter = meterById.get(bill.meterId)
       return bill
     })
-    const { data: charges } = await this.client
+    const { data: charges, error: chargesError } = await this.client
       .from('charges').select('source_id').not('source_id', 'is', null)
+    if (chargesError) return fail(chargesError.message)
     const billIds = new Set((charges ?? []).map((c: { source_id: string }) => c.source_id))
     for (const bill of mapped) bill.hasCharges = billIds.has(bill.id)
     return mapped
   }
 
   async createBill(input: BillInput): Promise<Bill> {
-    await this.requireAdmin()
     const { data, error } = await this.client
       .from('electricity_bills')
       .insert({
@@ -244,7 +227,6 @@ export class SupabaseStore implements AppStore {
   }
 
   async updateBill(id: string, patch: Partial<BillInput>): Promise<void> {
-    await this.requireAdmin()
     const row: Record<string, unknown> = {}
     if (patch.meterId !== undefined) row.meter_id = patch.meterId
     if (patch.billingMonth !== undefined) row.billing_month = patch.billingMonth
@@ -275,11 +257,16 @@ export class SupabaseStore implements AppStore {
         for (const existing of charges.filter((c) => c.sourceId === id)) {
           const match = planned.find((p) => p.tenantId === existing.tenantId)
           if (!match) continue
-          await this.client.from('charges').update({
+          const { error: chargeError } = await this.client.from('charges').update({
             amount: paiseToDecimalString(match.amountPaise),
             charge_date: match.chargeDate,
             description: match.description,
           }).eq('id', existing.id)
+          if (chargeError) {
+            throw new Error(
+              `Bill was saved, but its electricity charge ${existing.id} could not be synchronized: ${chargeError.message}`,
+            )
+          }
         }
       }
     }
@@ -290,7 +277,6 @@ export class SupabaseStore implements AppStore {
   }
 
   async applyBill(billId: string): Promise<number> {
-    await this.requireAdmin()
     const [bills, meters, tenants, charges] = await Promise.all([
       this.listBills(), this.listMeters(), this.listTenants(), this.listCharges(),
     ])
@@ -318,7 +304,6 @@ export class SupabaseStore implements AppStore {
   }
 
   async deleteBill(id: string): Promise<void> {
-    await this.requireAdmin()
     const { data: chargeRows } = await this.client
       .from('charges').select('id').eq('source_id', id)
     const chargeIds = (chargeRows ?? []).map((c: { id: string }) => c.id)
@@ -356,13 +341,11 @@ export class SupabaseStore implements AppStore {
   }
 
   async ensureRentCharges(period: string): Promise<void> {
-    await this.requireAdmin()
     const { error } = await this.client.rpc('ensure_rent_charges', { p_period: period })
     if (error) return fail(error.message)
   }
 
   async recordPayment(input: PaymentInput): Promise<Payment> {
-    await this.requireAdmin()
     if (input.amountPaise <= 0) throw new Error('Payment amount must be positive')
     const charges = (await this.listCharges()).filter((c) => c.tenantId === input.tenantId)
     const temp: Payment = {
@@ -389,7 +372,6 @@ export class SupabaseStore implements AppStore {
   }
 
   async deletePayment(id: string): Promise<void> {
-    await this.requireAdmin()
     const { data: allocs } = await this.client
       .from('payment_allocations').select('*').eq('payment_id', id)
     if ((allocs ?? []).length > 0) {
@@ -402,7 +384,6 @@ export class SupabaseStore implements AppStore {
   }
 
   async createCharge(input: ChargeInput): Promise<Charge> {
-    await this.requireAdmin()
     const { data, error } = await this.client
       .from('charges')
       .insert({
@@ -425,7 +406,6 @@ export class SupabaseStore implements AppStore {
   }
 
   async updateCharge(id: string, patch: Partial<ChargeInput>): Promise<void> {
-    await this.requireAdmin()
     const row: Record<string, unknown> = {}
     if (patch.chargeType !== undefined) row.charge_type = patch.chargeType
     if (patch.period !== undefined) row.period = patch.period
@@ -437,7 +417,6 @@ export class SupabaseStore implements AppStore {
   }
 
   async deleteCharge(id: string): Promise<void> {
-    await this.requireAdmin()
     const { count } = await this.client
       .from('payment_allocations').select('id', { count: 'exact', head: true }).eq('charge_id', id)
     if ((count ?? 0) > 0) {
@@ -455,7 +434,6 @@ export class SupabaseStore implements AppStore {
   }
 
   async logReminder(input: ReminderLogInput): Promise<ReminderLog> {
-    await this.requireAdmin()
     const { data, error } = await this.client
       .from('reminder_logs')
       .insert({
@@ -472,7 +450,6 @@ export class SupabaseStore implements AppStore {
   }
 
   async updateReminderLog(id: string, status: ReminderLog['status']): Promise<void> {
-    await this.requireAdmin()
     const { error } = await this.client.from('reminder_logs').update({ status }).eq('id', id)
     if (error) return fail(error.message)
   }

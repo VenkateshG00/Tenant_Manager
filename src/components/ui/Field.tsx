@@ -2,15 +2,15 @@ import { useId } from 'react'
 import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from 'react'
 
 interface FieldShellProps {
+  id: string
   label: string
   error?: string | null
   hint?: string | null
   required?: boolean
-  children: (id: string) => ReactNode
+  children: ReactNode
 }
 
-export function Field({ label, error, hint, required, children }: FieldShellProps) {
-  const id = useId()
+export function Field({ id, label, error, hint, required, children }: FieldShellProps) {
   return (
     <div className="flex flex-col gap-1.5">
       <label htmlFor={id} className="text-sm font-medium text-slate-700">
@@ -18,7 +18,7 @@ export function Field({ label, error, hint, required, children }: FieldShellProp
         {required && <span className="ml-0.5 text-rose-600" aria-hidden="true">*</span>}
         {required && <span className="sr-only"> (required)</span>}
       </label>
-      {children(id)}
+      {children}
       {hint && !error && <p className="text-xs text-slate-500">{hint}</p>}
       {error && (
         <p className="text-xs font-medium text-rose-600" role="alert">
@@ -41,17 +41,16 @@ interface InputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'id'> {
 }
 
 export function Input({ label, error, hint, required, className = '', ...rest }: InputProps) {
+  const id = useId()
   return (
-    <Field label={label} error={error} hint={hint} required={required}>
-      {(id) => (
-        <input
-          id={id}
-          required={required}
-          aria-invalid={error ? true : undefined}
-          className={[CONTROL, className].join(' ')}
-          {...rest}
-        />
-      )}
+    <Field id={id} label={label} error={error} hint={hint} required={required}>
+      <input
+        id={id}
+        required={required}
+        aria-invalid={error ? true : undefined}
+        className={[CONTROL, className].join(' ')}
+        {...rest}
+      />
     </Field>
   )
 }
@@ -64,19 +63,18 @@ interface SelectProps extends Omit<SelectHTMLAttributes<HTMLSelectElement>, 'id'
 }
 
 export function Select({ label, error, hint, required, className = '', children, ...rest }: SelectProps) {
+  const id = useId()
   return (
-    <Field label={label} error={error} hint={hint} required={required}>
-      {(id) => (
-        <select
-          id={id}
-          required={required}
-          aria-invalid={error ? true : undefined}
-          className={[CONTROL, className].join(' ')}
-          {...rest}
-        >
-          {children}
-        </select>
-      )}
+    <Field id={id} label={label} error={error} hint={hint} required={required}>
+      <select
+        id={id}
+        required={required}
+        aria-invalid={error ? true : undefined}
+        className={[CONTROL, className].join(' ')}
+        {...rest}
+      >
+        {children}
+      </select>
     </Field>
   )
 }
@@ -88,17 +86,16 @@ interface TextareaProps extends Omit<TextareaHTMLAttributes<HTMLTextAreaElement>
 }
 
 export function Textarea({ label, error, hint, required, className = '', ...rest }: TextareaProps) {
+  const id = useId()
   return (
-    <Field label={label} error={error} hint={hint} required={required}>
-      {(id) => (
-        <textarea
-          id={id}
-          required={required}
-          aria-invalid={error ? true : undefined}
-          className={[CONTROL, 'min-h-[80px] resize-y', className].join(' ')}
-          {...rest}
-        />
-      )}
+    <Field id={id} label={label} error={error} hint={hint} required={required}>
+      <textarea
+        id={id}
+        required={required}
+        aria-invalid={error ? true : undefined}
+        className={[CONTROL, 'min-h-[80px] resize-y', className].join(' ')}
+        {...rest}
+      />
     </Field>
   )
 }

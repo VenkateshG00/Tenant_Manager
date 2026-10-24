@@ -1,6 +1,6 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { useStore } from '../app/AppState'
-import { useAsync, useDebounced } from '../app/hooks'
+import { useDebounced } from '../app/hooks'
 import { useWorkspace } from '../app/useWorkspace'
 import { Badge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
@@ -12,6 +12,7 @@ import { TableWrap, Td, Th, Tr } from '../components/ui/Table'
 import { formatINR, paiseToInputValue } from '../lib/money'
 import { formatDate, todayISO } from '../lib/dates'
 import { parseRupees, validatePhone, type FieldErrors } from '../lib/validation'
+import { normalizeIndianPhone } from '../lib/phone'
 import { useToast } from '../app/Toast'
 import type { Tenant, TenantInput } from '../data/types'
 
@@ -49,6 +50,12 @@ function toForm(tenant: Tenant): FormState {
 
 type FormKey = keyof FormState
 
+function displayPhone(phone: string | null): string {
+  if (!phone) return 'Not saved'
+  const normalized = normalizeIndianPhone(phone)
+  return normalized.ok ? normalized.display : phone
+}
+
 function validate(form: FormState): FieldErrors<FormKey> {
   const errors: FieldErrors<FormKey> = {}
   if (!form.name.trim()) errors.name = 'Name is required'
@@ -79,9 +86,7 @@ export function TenantsPage() {
   const [toDelete, setToDelete] = useState<Tenant | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
 
-  const tenantsQuery = useAsync(() => store.listTenants(), [store, workspace.tenants.length])
-
-  const tenants = tenantsQuery.data ?? workspace.tenants
+  const tenants = workspace.tenants
 
   const filtered = useMemo(() => {
     const q = debounced.trim().toLowerCase()
@@ -138,7 +143,6 @@ export function TenantsPage() {
       else await store.createTenant(payload)
       toast.success(editing ? 'Tenant updated' : 'Tenant added')
       setOpen(false)
-      tenantsQuery.reload()
       workspace.reload()
     } catch (error) {
       setFormError(error instanceof Error ? error.message : String(error))
@@ -156,7 +160,6 @@ export function TenantsPage() {
     try {
       await store.setTenantActive(tenant.id, !tenant.isActive)
       toast.success(tenant.isActive ? `${tenant.name} deactivated` : `${tenant.name} reactivated`)
-      tenantsQuery.reload()
       workspace.reload()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error))
@@ -170,17 +173,14 @@ export function TenantsPage() {
       await store.deleteTenant(toDelete.id)
       toast.success('Tenant deleted')
       setToDelete(null)
-      tenantsQuery.reload()
       workspace.reload()
     } catch (error) {
       setDeleteError(error instanceof Error ? error.message : String(error))
     }
   }
 
-  if (tenantsQuery.loading && tenants.length === 0) return <LoadingBlock label="Loading tenants" />
-  if (tenantsQuery.error) {
-    return <ErrorState message={tenantsQuery.error} onRetry={tenantsQuery.reload} />
-  }
+  if (workspace.loading && tenants.length === 0) return <LoadingBlock label="Loading tenants" />
+  if (workspace.error) return <ErrorState message={workspace.error} onRetry={workspace.reload} />
 
   return (
     <>
@@ -255,7 +255,9 @@ export function TenantsPage() {
                 <Tr key={tenant.id}>
                   <Td className="font-medium text-slate-900">{tenant.name}</Td>
                   <Td>{tenant.roomNumber}</Td>
-                  <Td className="num">{tenant.phone ?? <span className="text-slate-400">Not saved</span>}</Td>
+                  <Td className="num">
+                    {tenant.phone ? displayPhone(tenant.phone) : <span className="text-slate-400">{displayPhone(null)}</span>}
+                  </Td>
                   <Td align="right" className="num">
                     {formatINR(tenant.monthlyRentPaise)}
                   </Td>
